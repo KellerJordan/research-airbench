@@ -1,8 +1,13 @@
-# elastic_airbench.py
-# Variant of airbench94 which can be scaled in a perfectly elastic manner.
-# Also removes label smoothing and TTA.
-# And lookahead, and progressive freezing of whitening layer bias.
-# Attains 92.99 mean accuracy in 1.58 seconds on an H100.
+"""
+clean_airbench.py
+
+Variant of airbench95 which removes the following:
+* Test-time augmentation
+* Lookahead optimization
+* Progressive freezing
+
+Attains 92.96 mean accuracy.
+"""
 
 #############################################
 #            Setup/Hyperparameters          #
@@ -35,13 +40,13 @@ torch.backends.cudnn.benchmark = True
 
 hyp = {
     'opt': {
-        'epochs': 10,
+        'epochs': 15,
         'batch_size': 1000,
-        'lr': 5.0,              # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
+        'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
         'momentum': 0.85,
         'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
-        'label_smoothing': 0.0,
+        'label_smoothing': 0.2,
     },
     'aug': {
         'flip': True,
@@ -50,8 +55,8 @@ hyp = {
     'net': {
         'widths': {
             'block1': 64,
-            'block2': 256,
-            'block3': 256,
+            'block2': 384,
+            'block3': 384,
         },
         'batchnorm_momentum': 0.9,
         'scaling_factor': 1/9,
@@ -264,12 +269,6 @@ def make_net(widths=hyp['net']['widths'], batchnorm_momentum=hyp['net']['batchno
             mod.float()
     return net
 
-def reinit_net(net):
-    for m in net.modules():
-        if type(m) in (Conv, BatchNorm, nn.Linear):
-            m.reset_parameters()
-    net[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
-
 ############################################
 #          Training and Inference          #
 ############################################
@@ -284,27 +283,25 @@ def evaluate(model, loader):
     logits = infer(model, loader)
     return (logits.argmax(1) == loader.labels).float().mean().item()
 
-def train(model, train_loader,
+def train(train_loader,
           label_smoothing=hyp['opt']['label_smoothing'], epochs=hyp['opt']['epochs'],
           learning_rate=hyp['opt']['lr'], weight_decay=hyp['opt']['weight_decay'], momentum=hyp['opt']['momentum'],
           bias_scaler=hyp['opt']['bias_scaler']):
 
-    batch_size = train_loader.batch_size
+    model = make_net()
+    train_loader.epoch = 0
+
     # Assuming gradients are constant in time, for Nesterov momentum, the below ratio is how much
     # larger the default steps will be than the underlying per-example gradients. We divide the
     # learning rate by this ratio in order to ensure steps are the same scale as gradients, regardless
     # of the choice of momentum.
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
     lr = learning_rate / kilostep_scale # un-decoupled learning rate for PyTorch SGD
-    wd = weight_decay * batch_size / kilostep_scale
+    wd = weight_decay * train_loader.batch_size / kilostep_scale
     lr_biases = lr * bias_scaler
 
     loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing, reduction='none')
     total_train_steps = epochs * len(train_loader)
-
-    # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
-    reinit_net(model)
-    current_steps = 0
 
     norm_biases = [p for k, p in model.named_parameters() if 'norm' in k]
     other_params = [p for k, p in model.named_parameters() if 'norm' not in k]
@@ -328,8 +325,10 @@ def train(model, train_loader,
     #     Training     #
     ####################
 
+    current_steps = 0
+
     model.train()
-    for _ in range(epochs):
+    for epoch in range(epochs):
         for inputs, labels in train_loader:
 
             outputs = model(inputs)
@@ -343,14 +342,17 @@ def train(model, train_loader,
             if current_steps == total_train_steps:
                 break
 
+    return model
+
 if __name__ == '__main__':
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=1000, aug=dict(flip=True, translate=2), altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
-    model = make_net()
     accs1 = []
-    for _ in range(15):
-        train(model, train_loader)
+    from tqdm import tqdm
+    for _ in tqdm(range(15)):
+        model = train(train_loader)
         acc = evaluate(model, test_loader)
+        print(acc)
         accs1.append(acc)
     print(torch.std_mean(torch.tensor(accs1)))
 
