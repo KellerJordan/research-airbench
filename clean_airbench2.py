@@ -5,7 +5,7 @@ Variant of airbench94 which removes the following:
 * Lookahead optimization
 * Progressive freezing
 
-Attains 93.99 mean accuracy.
+Attains 93.95 mean accuracy.
 """
 
 #############################################
@@ -341,11 +341,7 @@ if __name__ == '__main__':
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=1000, aug=dict(flip=True, translate=2), altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
-    accs = []
-    for _ in range(15):
-        model = train(train_loader)
-        acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
-        accs.append(acc)
-    accs = torch.tensor(accs)
-    print(torch.std_mean(accs))
+    model = train(train_loader)
+    acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
+    print(acc)
 
