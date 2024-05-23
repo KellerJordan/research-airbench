@@ -1,5 +1,5 @@
 """
-clean_airbench.py
+cleaner_airbench.py
 
 Variant of airbench94 which removes the following:
 * Lookahead optimization
