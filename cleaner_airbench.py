@@ -25,7 +25,7 @@ import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as T
 
-from airbench import evaluate
+from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
