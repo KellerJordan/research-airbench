@@ -194,12 +194,11 @@ def train(train_loader,
     loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing, reduction='none')
     total_train_steps = epochs * len(train_loader)
 
-    #norm_biases = [p for k, p in model.named_parameters() if 'norm' in k]
-    #other_params = [p for k, p in model.named_parameters() if 'norm' not in k]
-    #param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
-    #                 dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    #optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, eps=1e-5)
+    norm_biases = [p for k, p in model.named_parameters() if 'norm' in k]
+    other_params = [p for k, p in model.named_parameters() if 'norm' not in k]
+    param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
+                     dict(params=other_params, lr=lr, weight_decay=wd/lr)]
+    optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
 
     def triangle(steps, start=0, end=0, peak=0.5):
         xp = torch.tensor([0, int(peak * steps), steps])
