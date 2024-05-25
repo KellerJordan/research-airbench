@@ -9,7 +9,7 @@ Variant of airbench94 which removes the following:
 
 And adds renormalized SGD as the optimizer.
 
-Attains ?? mean accuracy.
+Attains 94.04 mean accuracy.
 """
 
 #############################################
