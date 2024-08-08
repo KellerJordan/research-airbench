@@ -31,7 +31,7 @@ hyp = {
     'opt': {
         'train_epochs': 37.0,
         'batch_size': 1024,
-        'lr': 9.9,               # learning rate per 1024 examples
+        'lr': 9.0,               # learning rate per 1024 examples
         'momentum': 0.85,
         'weight_decay': 0.012,   # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,     # scales up learning rate (but not weight decay) for BatchNorm biases
@@ -182,7 +182,8 @@ class InfiniteCifarLoader:
             assert len(batch_images) < batch_size
 
             # If we have already exhausted the current epoch, then begin a new one.
-            if current_pointer >= num_examples:
+            #if current_pointer >= num_examples:
+            if current_pointer > num_examples - batch_size:
                 # If we already reached the end of the last epoch then we need to generate
                 # a new augmented epoch of data (using random crop and alternating flip).
                 epoch += 1
@@ -449,7 +450,8 @@ def main(run):
 
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
     test_loader = InfiniteCifarLoader('cifar10', train=False, batch_size=2000)
-    train_loader = InfiniteCifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'])
+    train_loader = InfiniteCifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'],
+                                       aug_seed=None, order_seed=None)
     if run == 'warmup':
         # The only purpose of the first run is to warmup, so we can use dummy data
         train_loader.labels = torch.randint(0, 10, size=(len(train_loader.labels),), device=train_loader.labels.device)
@@ -493,6 +495,8 @@ def main(run):
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
+    results = []
+
     for indices, inputs, labels in train_loader:
 
         model[0].bias.requires_grad = (current_steps < hyp['opt']['whiten_bias_epochs'] * steps_per_epoch)
@@ -512,6 +516,8 @@ def main(run):
         loss.backward()
         optimizer.step()
         scheduler.step()
+
+        results.append((indices, loss_fn(outputs, labels)))
 
         current_steps += 1
         if current_steps % 5 == 0:
@@ -548,6 +554,9 @@ def main(run):
     ender.record()
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
+
+    #torch.save(results, 'result3.pt')
+    #1/0
 
     epoch = 'eval'
     print_training_details(locals(), is_final_entry=True)
