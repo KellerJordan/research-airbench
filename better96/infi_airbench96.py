@@ -182,8 +182,7 @@ class InfiniteCifarLoader:
             assert len(batch_images) < batch_size
 
             # If we have already exhausted the current epoch, then begin a new one.
-            #if current_pointer >= num_examples:
-            if current_pointer > num_examples - batch_size:
+            if current_pointer >= num_examples:
                 # If we already reached the end of the last epoch then we need to generate
                 # a new augmented epoch of data (using random crop and alternating flip).
                 epoch += 1
@@ -569,7 +568,7 @@ if __name__ == "__main__":
 
     print_columns(logging_columns_list, is_head=True)
     #main('warmup')
-    accs = torch.tensor([main(run) for run in range(10)])
+    accs = torch.tensor([main(run) for run in range(100)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
     log = {'code': code, 'accs': accs}
