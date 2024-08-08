@@ -174,6 +174,7 @@ class InfiniteCifarLoader:
         current_pointer = num_examples
         batch_images = torch.empty(0, 3, 32, 32, dtype=images0.dtype, device=images0.device)
         batch_labels = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
+        batch_indices = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
 
         while True:
 
@@ -207,30 +208,31 @@ class InfiniteCifarLoader:
                 # So that the subset causes not only a subset of the total examples to be shown, but also a subset of
                 # the actual sequence of examples which is shown during training.
                 indices_subset = indices[self.subset_mask[indices]]
-                images1 = images1[indices_subset]
-                labels1 = labels0[indices_subset]
                 current_pointer = 0
 
             # Now we are sure to have more data in this epoch remaining.
-            # This epoch's remaining data is given by (images1[current_pointer:], labels1[current_pointer:])
+            # This epoch's remaining data is given by (images1[current_pointer:], labels0[current_pointer:])
             # We add more data to the batch, up to whatever is needed to make a full batch (but it might not be enough).
             remaining_size = batch_size - len(batch_images)
 
             # Given that we want `remaining_size` more training examples, we construct them here, using
             # the remaining available examples in the epoch.
 
-            extra_images = images1[current_pointer:current_pointer+remaining_size]
-            extra_labels = labels1[current_pointer:current_pointer+remaining_size]
+            extra_indices = indices_subset[current_pointer:current_pointer+remaining_size]
+            extra_images = images1[extra_indices]
+            extra_labels = labels0[extra_indices]
             current_pointer += remaining_size
+            batch_indices = torch.cat([batch_indices, extra_indices])
             batch_images = torch.cat([batch_images, extra_images])
             batch_labels = torch.cat([batch_labels, extra_labels])
 
             # If we have a full batch ready then yield it and reset.
             if len(batch_images) == batch_size:
                 assert len(batch_images) == len(batch_labels)
-                yield (batch_images, batch_labels)
+                yield (batch_indices, batch_images, batch_labels)
                 batch_images = torch.empty(0, 3, 32, 32, dtype=images0.dtype, device=images0.device)
                 batch_labels = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
+                batch_indices = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
 
 #############################################
 #            Network Components             #
@@ -491,7 +493,7 @@ def main(run):
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
-    for inputs, labels in train_loader:
+    for indices, inputs, labels in train_loader:
 
         model[0].bias.requires_grad = (current_steps < hyp['opt']['whiten_bias_epochs'] * steps_per_epoch)
 
