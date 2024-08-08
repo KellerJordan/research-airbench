@@ -41,7 +41,7 @@ hyp = {
     'aug': {
         'flip': True,
         'translate': 4,
-        'cutout': 0,
+        'cutout': 12,
     },
     'net': {
         'widths': {
@@ -205,8 +205,8 @@ class InfiniteCifarLoader:
             # Given that we want `remaining_size` more training examples, we construct them here, using
             # the remaining available examples in the epoch.
 
-            mixup = True
-            mixup_frac = 1.0
+            mixup = False
+            mixup_frac = 0.5
             if mixup:
                 # How much data we want
                 b = ceil(remaining_size * mixup_frac)
@@ -578,7 +578,7 @@ if __name__ == "__main__":
 
     print_columns(logging_columns_list, is_head=True)
     #main('warmup')
-    accs = torch.tensor([main(run) for run in range(25)])
+    accs = torch.tensor([main(run) for run in range(10)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
     log = {'code': code, 'accs': accs}
