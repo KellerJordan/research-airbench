@@ -115,7 +115,7 @@ class InfiniteCifarLoader:
     and support stochastic iteration counts in order to preserve perfect linearity/independence.
     """
 
-    def __init__(self, path, train=True, batch_size=500, aug=None, altflip=True, subset_mask=None):
+    def __init__(self, path, train=True, batch_size=500, aug=None, altflip=True, subset_mask=None, aug_seed=None, order_seed=None):
         data_path = os.path.join(path, 'train.pt' if train else 'test.pt')
         if not os.path.exists(data_path):
             dset = torchvision.datasets.CIFAR10(path, download=True, train=train)
@@ -138,6 +138,18 @@ class InfiniteCifarLoader:
         self.altflip = altflip
         self.subset_mask = subset_mask if subset_mask is not None else torch.tensor([True]*len(self.images)).cuda()
         self.train = train
+        self.aug_seed = aug_seed
+        self.order_seed = order_seed
+
+    def set_random_state(self, seed, state):
+        if seed is None:
+            # If we don't get a data seed, then make sure to randomize the state using independent generator, since
+            # it might have already been set by the model seed.
+            import random
+            torch.manual_seed(random.randint(0, 2**63))
+        else:
+            seed1 = 1000 * seed + state # just don't do more than 1000 epochs or else there will be overlap
+            torch.manual_seed(seed1)
 
     def __iter__(self):
 
@@ -145,6 +157,7 @@ class InfiniteCifarLoader:
         images0 = self.normalize(self.images)
         # Pre-randomly flip images in order to do alternating flip later.
         if self.aug.get('flip', False) and self.altflip:
+            self.set_random_state(self.aug_seed, 0)
             images0 = batch_flip_lr(images0)
         # Pre-pad images to save time when doing random translation
         pad = self.aug.get('translate', 0)
@@ -173,6 +186,7 @@ class InfiniteCifarLoader:
                 # a new augmented epoch of data (using random crop and alternating flip).
                 epoch += 1
 
+                self.set_random_state(self.aug_seed, epoch)
                 if pad > 0:
                     images1 = batch_crop(images0, 32)
                 if self.aug.get('flip', False):
@@ -183,6 +197,7 @@ class InfiniteCifarLoader:
                 if self.aug.get('cutout', 0) > 0:
                     images1 = batch_cutout(images1, self.aug['cutout'])
 
+                self.set_random_state(self.order_seed, epoch)
                 indices = (torch.randperm if self.train else torch.arange)(len(self.images), device=images0.device)
 
                 # The effect of doing subsetting in this manner is as follows. If the permutation wants to show us
