@@ -41,7 +41,7 @@ hyp = {
     'aug': {
         'flip': True,
         'translate': 4,
-        'cutout': 12,
+        'cutout': 0,
     },
     'net': {
         'widths': {
@@ -150,7 +150,8 @@ class InfiniteCifarLoader:
         pad = self.aug.get('translate', 0)
         if pad > 0:
             images0 = F.pad(images0, (pad,)*4, 'reflect')
-        labels0 = self.labels
+        # Get one-hot labels because we might do mixup.
+        labels0 = F.one_hot(self.labels).float()
 
         # Iterate forever
         epoch = 0
@@ -160,19 +161,11 @@ class InfiniteCifarLoader:
         num_examples = self.subset_mask.sum().item()
         current_pointer = num_examples
         batch_images = torch.empty(0, 3, 32, 32, dtype=images0.dtype, device=images0.device)
-        batch_labels = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
+        batch_labels = torch.empty(0, 10, dtype=labels0.dtype, device=labels0.device)
 
         while True:
 
-            # If we have a full batch ready then just yield it and reset.
-            if len(batch_images) == batch_size:
-                assert len(batch_images) == len(batch_labels)
-                yield (batch_images, batch_labels)
-                batch_images = torch.empty(0, 3, 32, 32, dtype=images0.dtype, device=images0.device)
-                batch_labels = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
-                continue
-
-            # Otherwise, we need to generate more data to add to the batch.
+            # Assume we need to generate more data to add to the batch.
             assert len(batch_images) < batch_size
 
             # If we have already exhausted the current epoch, then begin a new one.
@@ -208,9 +201,56 @@ class InfiniteCifarLoader:
             # This epoch's remaining data is given by (images1[current_pointer:], labels1[current_pointer:])
             # We add more data to the batch, up to whatever is needed to make a full batch (but it might not be enough).
             remaining_size = batch_size - len(batch_images)
-            batch_images = torch.cat([batch_images, images1[current_pointer:current_pointer+remaining_size]])
-            batch_labels = torch.cat([batch_labels, labels1[current_pointer:current_pointer+remaining_size]])
-            current_pointer += remaining_size
+
+            # Given that we want `remaining_size` more training examples, we construct them here, using
+            # the remaining available examples in the epoch.
+
+            mixup = True
+            mixup_frac = 1.0
+            if mixup:
+                # How much data we want
+                b = ceil(remaining_size * mixup_frac)
+                a = remaining_size - b
+                k = a + 2 * b
+
+                extra_images = images1[current_pointer:current_pointer+k]
+                extra_labels = labels1[current_pointer:current_pointer+k]
+
+                # How much we actually got
+                k = len(extra_images)
+                b = ceil(k * mixup_frac / (1 + mixup_frac))
+                a = k - 2 * b
+
+                # Normal ERM examples
+                extra_images1 = extra_images[:a]
+                extra_labels1 = extra_labels[:a]
+
+                # Mixup examples
+                alpha = torch.tensor([2.0])
+                beta_distribution = torch.distributions.Beta(alpha, alpha)
+                lamb = beta_distribution.sample((b,)).cuda()
+                extra_images2 = torch.lerp(extra_images[a:a+b], extra_images[a+b:a+2*b], lamb.half().view(b, 1, 1, 1))
+                extra_labels2 = torch.lerp(extra_labels[a:a+b], extra_labels[a+b:a+2*b], lamb)
+
+                extra_images = torch.cat([extra_images1, extra_images2])
+                extra_labels = torch.cat([extra_labels1, extra_labels2])
+
+                current_pointer += k
+
+            else:
+                extra_images = images1[current_pointer:current_pointer+remaining_size]
+                extra_labels = labels1[current_pointer:current_pointer+remaining_size]
+                current_pointer += remaining_size
+
+            batch_images = torch.cat([batch_images, extra_images])
+            batch_labels = torch.cat([batch_labels, extra_labels])
+
+            # If we have a full batch ready then yield it and reset.
+            if len(batch_images) == batch_size:
+                assert len(batch_images) == len(batch_labels)
+                yield (batch_images, batch_labels)
+                batch_images = torch.empty(0, 3, 32, 32, dtype=images0.dtype, device=images0.device)
+                batch_labels = torch.empty(0, dtype=labels0.dtype, device=labels0.device)
 
 #############################################
 #            Network Components             #
@@ -508,7 +548,7 @@ def main(run):
             ####################
 
             # Save the accuracy and loss from the last training batch of the epoch
-            train_acc = (outputs.detach().argmax(1) == labels).float().mean().item()
+            train_acc = (outputs.detach().argmax(1) == labels.argmax(1)).float().mean().item()
             train_loss = loss.item() / batch_size
             val_acc = evaluate(model, test_loader, tta_level=0)
             print_training_details(locals(), is_final_entry=False)
