@@ -554,11 +554,11 @@ def main(run):
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
-    #torch.save(results, 'result3.pt')
-    #1/0
-
     epoch = 'eval'
     print_training_details(locals(), is_final_entry=True)
+
+    #torch.save(results, 'result99.pt')
+    #1/0
 
     return tta_val_acc
 
