@@ -38,6 +38,7 @@ hyp = {
             'block2': 64,
             'block3': 64,
         },
+        'depth': 2,
         'scaling_factor': 1/9,
     },
     'net': {
@@ -46,6 +47,7 @@ hyp = {
             'block2': 384,
             'block3': 512,
         },
+        'depth': 3,
         'scaling_factor': 1/9,
         'tta_level': 2,         # the level of test-time augmentation: 0=none, 1=mirror, 2=mirror+translate
     },
@@ -138,9 +140,6 @@ def train_proxy(hyp):
             return frac
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
 
-    alpha_schedule = 0.95**5 * (torch.arange(total_train_steps+1) / total_train_steps)**3
-    lookahead_state = LookaheadState(model)
-
     # Initialize the whitening layer using training images
     train_images = train_loader.normalize(train_loader.images[:5000])
     init_whitening_conv(model[0], train_images)
@@ -148,12 +147,6 @@ def train_proxy(hyp):
     masks = []
 
     for indices, inputs, labels in train_loader:
-
-        model[0].bias.requires_grad = (current_steps < hyp['opt']['whiten_bias_epochs'] * steps_per_epoch)
-
-        ####################
-        #     Training     #
-        ####################
 
         if current_steps % steps_per_epoch == 0:
             epoch = current_steps // steps_per_epoch
@@ -172,11 +165,7 @@ def train_proxy(hyp):
         scheduler.step()
 
         current_steps += 1
-        if current_steps % 5 == 0:
-            lookahead_state.update(model, decay=alpha_schedule[current_steps].item())
         if current_steps == total_train_steps:
-            if lookahead_state is not None:
-                lookahead_state.update(model, decay=1.0)
             break
 
     return masks

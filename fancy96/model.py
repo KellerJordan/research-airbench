@@ -37,15 +37,18 @@ class Conv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
 
 class ConvGroup(nn.Module):
-    def __init__(self, channels_in, channels_out):
+    def __init__(self, channels_in, channels_out, depth):
         super().__init__()
+        assert depth in (2, 3)
+        self.depth = depth
         self.conv1 = Conv(channels_in,  channels_out)
         self.pool = nn.MaxPool2d(2)
         self.norm1 = BatchNorm(channels_out)
         self.conv2 = Conv(channels_out, channels_out)
         self.norm2 = BatchNorm(channels_out)
-        self.conv3 = Conv(channels_out, channels_out)
-        self.norm3 = BatchNorm(channels_out)
+        if depth == 3:
+            self.conv3 = Conv(channels_out, channels_out)
+            self.norm3 = BatchNorm(channels_out)
         self.activ = nn.GELU()
 
     def forward(self, x):
@@ -53,14 +56,16 @@ class ConvGroup(nn.Module):
         x = self.pool(x)
         x = self.norm1(x)
         x = self.activ(x)
-        x0 = x
+        if self.depth == 3:
+            x0 = x
         x = self.conv2(x)
         x = self.norm2(x)
         x = self.activ(x)
-        x = self.conv3(x)
-        x = self.norm3(x)
-        x = x + x0
-        x = self.activ(x)
+        if self.depth == 3:
+            x = self.conv3(x)
+            x = self.norm3(x)
+            x = x + x0
+            x = self.activ(x)
         return x
 
 #############################################
@@ -70,14 +75,15 @@ class ConvGroup(nn.Module):
 def make_net(hyp):
     widths = hyp['widths']
     scaling_factor = hyp['scaling_factor']
+    depth = hyp['depth']
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
     net = nn.Sequential(
         Conv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
         nn.GELU(),
-        ConvGroup(whiten_width,     widths['block1']),
-        ConvGroup(widths['block1'], widths['block2']),
-        ConvGroup(widths['block2'], widths['block3']),
+        ConvGroup(whiten_width,     widths['block1'], depth),
+        ConvGroup(widths['block1'], widths['block2'], depth),
+        ConvGroup(widths['block2'], widths['block3'], depth),
         nn.MaxPool2d(3),
         Flatten(),
         nn.Linear(widths['block3'], 10, bias=False),
