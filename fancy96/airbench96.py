@@ -11,7 +11,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from model import make_net, init_whitening_conv
+from model import make_net, reinit_net, init_whitening_conv
 from utils import evaluate, set_random_state, InfiniteCifarLoader
 
 torch.backends.cudnn.benchmark = True
@@ -101,7 +101,7 @@ def print_training_details(variables, is_final_entry):
 #                Training                  #
 ############################################
 
-def train_proxy(hyp):
+def train_proxy(hyp, model):
 
     batch_size = hyp['opt']['batch_size']
     epochs = hyp['opt']['train_epochs']
@@ -119,7 +119,7 @@ def train_proxy(hyp):
     total_train_steps = ceil(steps_per_epoch * epochs)
 
     set_random_state(None, 0)
-    model = make_net(hyp['proxy'])
+    reinit_net(model)
     print('Proxy parameters:', sum(p.numel() for p in model.parameters()))
     current_steps = 0
 
@@ -142,7 +142,7 @@ def train_proxy(hyp):
 
     # Initialize the whitening layer using training images
     train_images = train_loader.normalize(train_loader.images[:5000])
-    init_whitening_conv(model[0], train_images)
+    init_whitening_conv(model._orig_mod[0], train_images)
 
     masks = []
 
@@ -170,7 +170,7 @@ def train_proxy(hyp):
 
     return masks
 
-def main(run, hyp):
+def main(run, hyp, model_proxy, model_trainbias, model_freezebias):
 
     batch_size = hyp['opt']['batch_size']
     epochs = hyp['opt']['train_epochs']
@@ -192,15 +192,21 @@ def main(run, hyp):
     total_train_steps = ceil(steps_per_epoch * epochs)
 
     set_random_state(None, 0)
-    model = make_net(hyp['net'])
-    print('Main model parameters:', sum(p.numel() for p in model.parameters()))
+    reinit_net(model_trainbias)
+    print('Main model parameters:', sum(p.numel() for p in model_trainbias.parameters()))
     current_steps = 0
 
-    norm_biases = [p for k, p in model.named_parameters() if 'norm' in k and p.requires_grad]
-    other_params = [p for k, p in model.named_parameters() if 'norm' not in k and p.requires_grad]
+    norm_biases = [p for k, p in model_trainbias.named_parameters() if 'norm' in k]
+    other_params = [p for k, p in model_trainbias.named_parameters() if 'norm' not in k]
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
+    optimizer_trainbias = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
+
+    norm_biases = [p for k, p in model_freezebias.named_parameters() if 'norm' in k]
+    other_params = [p for k, p in model_freezebias.named_parameters() if 'norm' not in k]
+    param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
+                     dict(params=other_params, lr=lr, weight_decay=wd/lr)]
+    optimizer_freezebias = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
 
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.1)
@@ -211,10 +217,11 @@ def main(run, hyp):
         else:
             frac = (total_train_steps - step) / warmdown_steps
             return frac
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
+    scheduler_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer_trainbias, get_lr)
+    scheduler_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer_freezebias, get_lr)
 
     alpha_schedule = 0.95**5 * (torch.arange(total_train_steps+1) / total_train_steps)**3
-    lookahead_state = LookaheadState(model)
+    lookahead_state = LookaheadState(model_trainbias)
 
     # For accurately timing GPU code
     starter = torch.cuda.Event(enable_timing=True)
@@ -224,7 +231,7 @@ def main(run, hyp):
     # Initialize the whitening layer using training images
     starter.record()
     train_images = train_loader.normalize(train_loader.images[:5000])
-    init_whitening_conv(model[0], train_images)
+    init_whitening_conv(model_trainbias._orig_mod[0], train_images)
     ender.record()
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
@@ -232,14 +239,25 @@ def main(run, hyp):
     # Do a small proxy run to collect masks for use in fullsize run
     print('Training small proxy...')
     starter.record()
-    masks = iter(train_proxy(hyp))
+    masks = iter(train_proxy(hyp, model_proxy))
     ender.record()
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
     for indices, inputs, labels in train_loader:
 
-        model[0].bias.requires_grad = (current_steps < hyp['opt']['whiten_bias_epochs'] * steps_per_epoch)
+        # After training the whiten bias for some epochs, swap in the compiled model with frozen bias
+        if current_steps == 0:
+            model = model_trainbias
+            optimizer = optimizer_trainbias
+            scheduler = scheduler_trainbias
+        elif epoch == hyp['opt']['whiten_bias_epochs'] * steps_per_epoch:
+            model = model_freezebias
+            optimizer = optimizer_freezebias
+            scheduler = scheduler_freezebias
+            model.load_state_dict(model_trainbias.state_dict())
+            optimizer.load_state_dict(optimizer_trainbias.state_dict())
+            scheduler.load_state_dict(scheduler_trainbias.state_dict())
 
         ####################
         #     Training     #
@@ -306,8 +324,18 @@ if __name__ == "__main__":
     with open(sys.argv[0]) as f:
         code = f.read()
 
+    model_proxy = make_net(hyp['proxy'])
+    #model_proxy[0].bias.requires_grad = False
+    model_trainbias = make_net(hyp['net'])
+    model_freezebias = make_net(hyp['net'])
+    model_freezebias[0].bias.requires_grad = False
+    model_proxy = torch.compile(model_proxy, mode='max-autotune')
+    model_trainbias = torch.compile(model_trainbias, mode='max-autotune')
+    model_freezebias = torch.compile(model_freezebias, mode='max-autotune')
+
     print_columns(logging_columns_list, is_head=True)
-    accs = torch.tensor([main(run, hyp) for run in range(15)])
+    accs = torch.tensor([main(run, hyp, model_proxy, model_trainbias, model_freezebias)
+                         for run in range(15)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
     log = {'code': code, 'accs': accs}

@@ -97,6 +97,11 @@ def make_net(hyp):
             mod.float()
     return net
 
+def reinit_net(model):
+    for m in model.modules():
+        if type(m) in (Conv, BatchNorm, nn.Linear):
+            m.reset_parameters()
+
 #############################################
 #       Whitening Conv Initialization       #
 #############################################
