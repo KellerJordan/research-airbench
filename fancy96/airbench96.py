@@ -34,9 +34,9 @@ hyp = {
     },
     'proxy': {
         'widths': {
-            'block1': 128,
-            'block2': 384,
-            'block3': 512,
+            'block1': 64,
+            'block2': 64,
+            'block3': 64,
         },
         'scaling_factor': 1/9,
     },
@@ -118,6 +118,7 @@ def train_proxy(hyp):
 
     set_random_state(None, 0)
     model = make_net(hyp['proxy'])
+    print('Proxy parameters:', sum(p.numel() for p in model.parameters()))
     current_steps = 0
 
     norm_biases = [p for k, p in model.named_parameters() if 'norm' in k and p.requires_grad]
@@ -203,6 +204,7 @@ def main(run, hyp):
 
     set_random_state(None, 0)
     model = make_net(hyp['net'])
+    print('Main model parameters:', sum(p.numel() for p in model.parameters()))
     current_steps = 0
 
     norm_biases = [p for k, p in model.named_parameters() if 'norm' in k and p.requires_grad]
@@ -239,6 +241,7 @@ def main(run, hyp):
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
     # Do a small proxy run to collect masks for use in fullsize run
+    print('Training small proxy...')
     starter.record()
     masks = iter(train_proxy(hyp))
     ender.record()
