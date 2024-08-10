@@ -188,7 +188,6 @@ def train(train_loader):
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
     optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
-
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
@@ -199,10 +198,6 @@ def train(train_loader):
             frac = (step - warmup_steps) / warmdown_steps
             return (1 - frac)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
-
-    ####################
-    #     Training     #
-    ####################
 
     current_steps = 0
     model.train()
