@@ -153,7 +153,7 @@ def train_proxy(hyp, model, data_seed):
             model.train()
 
         # Skip every other backward pass
-        if current_steps % 2 == 0:
+        if current_steps % 4 == 0:
             outputs = model(inputs)
             loss1 = loss_fn(outputs, labels)
             mask = torch.zeros(len(inputs)).cuda().bool()
