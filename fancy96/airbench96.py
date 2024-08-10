@@ -35,7 +35,7 @@ hyp = {
     },
     'proxy': {
         'widths': {
-            'block1': 64,
+            'block1': 32,
             'block2': 64,
             'block3': 64,
         },
