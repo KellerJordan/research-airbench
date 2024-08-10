@@ -102,7 +102,7 @@ def print_training_details(variables, is_final_entry):
 #                Training                  #
 ############################################
 
-def train_proxy(hyp, model):
+def train_proxy(hyp, model, data_seed):
 
     batch_size = hyp['opt']['batch_size']
     epochs = hyp['opt']['train_epochs']
@@ -113,9 +113,8 @@ def train_proxy(hyp, model):
     lr_biases = lr * hyp['opt']['bias_scaler']
 
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
-    test_loader = InfiniteCifarLoader('cifar10', train=False, batch_size=2000)
     train_loader = InfiniteCifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'],
-                                       aug_seed=0, order_seed=0)
+                                       aug_seed=data_seed, order_seed=data_seed)
     steps_per_epoch = len(train_loader.images) // batch_size
     total_train_steps = ceil(steps_per_epoch * epochs)
 
@@ -153,6 +152,7 @@ def train_proxy(hyp, model):
             epoch = current_steps // steps_per_epoch
             model.train()
 
+        # Skip every other backward pass
         if current_steps % 2 == 0:
             outputs = model(inputs)
             loss1 = loss_fn(outputs, labels)
@@ -163,8 +163,6 @@ def train_proxy(hyp, model):
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
-            scheduler.step()
-
         else:
             with torch.no_grad():
                 outputs = model(inputs)
@@ -172,6 +170,8 @@ def train_proxy(hyp, model):
                 mask = torch.zeros(len(inputs)).cuda().bool()
                 mask[loss1.argsort()[-hyp['opt']['batch_size_masked']:]] = True
                 masks.append(mask)
+
+        scheduler.step()
 
         current_steps += 1
         if current_steps == total_train_steps:
@@ -193,10 +193,14 @@ def main(run, hyp, model_proxy, model_trainbias, model_freezebias):
     wd = hyp['opt']['weight_decay'] * batch_size / kilostep_scale
     lr_biases = lr * hyp['opt']['bias_scaler']
 
+    set_random_state(None, 0)
+    import random
+    data_seed = random.randint(0, 2**50)
+
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
     test_loader = InfiniteCifarLoader('cifar10', train=False, batch_size=2000)
     train_loader = InfiniteCifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'],
-                                       aug_seed=0, order_seed=0)
+                                       aug_seed=data_seed, order_seed=data_seed)
     steps_per_epoch = len(train_loader.images) // batch_size
     total_train_steps = ceil(steps_per_epoch * epochs)
 
@@ -248,7 +252,7 @@ def main(run, hyp, model_proxy, model_trainbias, model_freezebias):
     # Do a small proxy run to collect masks for use in fullsize run
     print('Training small proxy...')
     starter.record()
-    masks = iter(train_proxy(hyp, model_proxy))
+    masks = iter(train_proxy(hyp, model_proxy, data_seed))
     ender.record()
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
@@ -344,7 +348,7 @@ if __name__ == "__main__":
 
     print_columns(logging_columns_list, is_head=True)
     accs = torch.tensor([main(run, hyp, model_proxy, model_trainbias, model_freezebias)
-                         for run in range(15)])
+                         for run in range(10)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
     log = {'code': code, 'accs': accs}
