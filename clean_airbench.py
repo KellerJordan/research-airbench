@@ -145,9 +145,9 @@ def make_net():
     net = nn.Sequential(
         Conv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
         nn.GELU(),
-        ConvGroup(whiten_width,     widths['block1'], batchnorm_momentum),
-        ConvGroup(widths['block1'], widths['block2'], batchnorm_momentum),
-        ConvGroup(widths['block2'], widths['block3'], batchnorm_momentum),
+        ConvGroup(whiten_width,     widths['block1']),
+        ConvGroup(widths['block1'], widths['block2']),
+        ConvGroup(widths['block2'], widths['block3']),
         nn.MaxPool2d(3),
         Flatten(),
         nn.Linear(widths['block3'], 10, bias=False),
