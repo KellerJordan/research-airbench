@@ -20,6 +20,7 @@ hyp = {
     'opt': {
         'train_epochs': 50.0,
         'batch_size': 1024,
+        'batch_size_masked': 512,
         'lr': 9.0,               # learning rate per 1024 examples
         'momentum': 0.85,
         'weight_decay': 0.012,   # weight decay per 1024 examples (decoupled from learning rate)
@@ -155,7 +156,7 @@ def train_proxy(hyp, model):
         outputs = model(inputs)
         loss1 = loss_fn(outputs, labels)
         mask = torch.zeros(len(inputs)).cuda().bool()
-        mask[loss1.argsort()[-512:]] = True
+        mask[loss1.argsort()[-hyp['opt']['batch_size_masked']:]] = True
         masks.append(mask)
         loss = (loss1 * mask.float()).sum()
 
@@ -325,7 +326,7 @@ if __name__ == "__main__":
         code = f.read()
 
     model_proxy = make_net(hyp['proxy'])
-    #model_proxy[0].bias.requires_grad = False
+    model_proxy[0].bias.requires_grad = False
     model_trainbias = make_net(hyp['net'])
     model_freezebias = make_net(hyp['net'])
     model_freezebias[0].bias.requires_grad = False
