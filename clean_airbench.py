@@ -33,18 +33,6 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-# We express the main training hyperparameters (batch size, learning rate, momentum, and weight decay)
-# in decoupled form, so that each one can be tuned independently. This accomplishes the following:
-# * Assuming time-constant gradients, the average step size is decoupled from everything but the lr.
-# * The size of the weight decay update is decoupled from everything but the wd.
-# In constrast, normally when we increase the (Nesterov) momentum, this also scales up the step size
-# proportionally to 1 + 1 / (1 - momentum), meaning we cannot change momentum without having to re-tune
-# the learning rate. Similarly, normally when we increase the learning rate this also increases the size
-# of the weight decay, requiring a proportional decrease in the wd to maintain the same decay strength.
-#
-# The practical impact is that hyperparameter tuning is faster, since this parametrization allows each
-# one to be tuned independently. See https://myrtle.ai/learn/how-to-train-your-resnet-5-hyperparameters/.
-
 hyp = {
     'opt': {
         'epochs': 10,
@@ -212,7 +200,7 @@ def train(train_loader,
             return 0.2 * (1 - frac) + 1.0 * frac
         else:
             frac = (step - warmup_steps) / warmdown_steps
-            return 1.0 * (1 - frac) + 0.0 * frac
+            return (1 - frac)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
 
     ####################
