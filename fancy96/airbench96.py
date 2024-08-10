@@ -18,7 +18,7 @@ torch.backends.cudnn.benchmark = True
 
 hyp = {
     'opt': {
-        'train_epochs': 50.0,
+        'train_epochs': 47.0,
         'batch_size': 1024,
         'batch_size_masked': 512,
         'lr': 9.0,               # learning rate per 1024 examples
@@ -153,17 +153,25 @@ def train_proxy(hyp, model):
             epoch = current_steps // steps_per_epoch
             model.train()
 
-        outputs = model(inputs)
-        loss1 = loss_fn(outputs, labels)
-        mask = torch.zeros(len(inputs)).cuda().bool()
-        mask[loss1.argsort()[-hyp['opt']['batch_size_masked']:]] = True
-        masks.append(mask)
-        loss = (loss1 * mask.float()).sum()
+        if current_steps % 2 == 0:
+            outputs = model(inputs)
+            loss1 = loss_fn(outputs, labels)
+            mask = torch.zeros(len(inputs)).cuda().bool()
+            mask[loss1.argsort()[-hyp['opt']['batch_size_masked']:]] = True
+            masks.append(mask)
+            loss = (loss1 * mask.float()).sum()
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
+        else:
+            with torch.no_grad():
+                outputs = model(inputs)
+                loss1 = loss_fn(outputs, labels)
+                mask = torch.zeros(len(inputs)).cuda().bool()
+                mask[loss1.argsort()[-hyp['opt']['batch_size_masked']:]] = True
+                masks.append(mask)
 
         current_steps += 1
         if current_steps == total_train_steps:
