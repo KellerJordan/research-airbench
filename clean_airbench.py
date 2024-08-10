@@ -53,7 +53,6 @@ hyp = {
             'block2': 256,
             'block3': 256,
         },
-        'batchnorm_momentum': 0.9,
         'scaling_factor': 1/9,
         'tta_level': 2,
     },
@@ -75,9 +74,9 @@ class Mul(nn.Module):
         return x * self.scale
 
 class BatchNorm(nn.BatchNorm2d):
-    def __init__(self, num_features, momentum, eps=1e-12,
+    def __init__(self, num_features, eps=1e-12,
                  weight=False, bias=True):
-        super().__init__(num_features, eps=eps, momentum=1-momentum)
+        super().__init__(num_features, eps=eps)
         self.weight.requires_grad = weight
         self.bias.requires_grad = bias
         # Note that PyTorch already initializes the weights to one and bias to zero
@@ -94,13 +93,13 @@ class Conv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
 
 class ConvGroup(nn.Module):
-    def __init__(self, channels_in, channels_out, batchnorm_momentum):
+    def __init__(self, channels_in, channels_out):
         super().__init__()
         self.conv1 = Conv(channels_in,  channels_out)
         self.pool = nn.MaxPool2d(2)
-        self.norm1 = BatchNorm(channels_out, batchnorm_momentum)
+        self.norm1 = BatchNorm(channels_out)
         self.conv2 = Conv(channels_out, channels_out)
-        self.norm2 = BatchNorm(channels_out, batchnorm_momentum)
+        self.norm2 = BatchNorm(channels_out)
         self.activ = nn.GELU()
 
     def forward(self, x):
@@ -139,7 +138,8 @@ eigenvectors_scaled = torch.tensor([
 -1.2133e+01,  1.2133e+01,  1.2148e+01, -1.2148e+01,  7.4141e+00, -7.4180e+00, -7.4219e+00,  7.4297e+00,
 ]).reshape(12, 3, 2, 2)
 
-def make_net(widths=hyp['net']['widths'], batchnorm_momentum=hyp['net']['batchnorm_momentum']):
+def make_net():
+    widths = hyp['net']['widths']
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
     net = nn.Sequential(
@@ -166,22 +166,21 @@ def make_net(widths=hyp['net']['widths'], batchnorm_momentum=hyp['net']['batchno
 #          Training and Inference          #
 ############################################
 
-def train(train_loader,
-          label_smoothing=hyp['opt']['label_smoothing'], epochs=hyp['opt']['epochs'],
-          learning_rate=hyp['opt']['lr'], weight_decay=hyp['opt']['weight_decay'], momentum=hyp['opt']['momentum'],
-          bias_scaler=hyp['opt']['bias_scaler']):
+def train(train_loader):
 
+    momentum = hyp['opt']['momentum']
+    epochs = hyp['opt']['epochs']
     # Assuming gradients are constant in time, for Nesterov momentum, the below ratio is how much
     # larger the default steps will be than the underlying per-example gradients. We divide the
     # learning rate by this ratio in order to ensure steps are the same scale as gradients, regardless
     # of the choice of momentum.
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
-    lr = learning_rate / kilostep_scale # un-decoupled learning rate for PyTorch SGD
-    wd = weight_decay * train_loader.batch_size / kilostep_scale
-    lr_biases = lr * bias_scaler
+    lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
+    wd = hyp['opt']['weight_decay'] * train_loader.batch_size / kilostep_scale
+    lr_biases = lr * hyp['opt']['bias_scaler']
 
     model = make_net()
-    loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing, reduction='none')
+    loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
     total_train_steps = epochs * len(train_loader)
 
     norm_biases = [p for k, p in model.named_parameters() if 'norm' in k]
