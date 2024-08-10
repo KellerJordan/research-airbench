@@ -224,7 +224,8 @@ def train(train_loader):
     return model
 
 if __name__ == '__main__':
-    train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=1000, aug=dict(flip=True, translate=2), altflip=True)
+    train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'],
+                               aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
     model = train(train_loader)
