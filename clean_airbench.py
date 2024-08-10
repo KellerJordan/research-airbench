@@ -171,9 +171,6 @@ def train(train_loader,
           learning_rate=hyp['opt']['lr'], weight_decay=hyp['opt']['weight_decay'], momentum=hyp['opt']['momentum'],
           bias_scaler=hyp['opt']['bias_scaler']):
 
-    model = make_net()
-    train_loader.epoch = 0
-
     # Assuming gradients are constant in time, for Nesterov momentum, the below ratio is how much
     # larger the default steps will be than the underlying per-example gradients. We divide the
     # learning rate by this ratio in order to ensure steps are the same scale as gradients, regardless
@@ -183,6 +180,7 @@ def train(train_loader,
     wd = weight_decay * train_loader.batch_size / kilostep_scale
     lr_biases = lr * bias_scaler
 
+    model = make_net()
     loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing, reduction='none')
     total_train_steps = epochs * len(train_loader)
 
@@ -208,7 +206,6 @@ def train(train_loader,
     ####################
 
     current_steps = 0
-
     model.train()
     from tqdm import tqdm
     for epoch in tqdm(range(epochs)):
