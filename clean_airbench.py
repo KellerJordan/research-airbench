@@ -18,11 +18,6 @@ Attains 93.95 mean accuracy.
 #            Setup/Hyperparameters          #
 #############################################
 
-import os
-import sys
-import uuid
-from math import ceil
-
 import torch
 from torch import nn
 import torch.nn.functional as F
