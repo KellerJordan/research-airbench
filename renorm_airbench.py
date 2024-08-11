@@ -16,19 +16,13 @@ Attains 94.04 mean accuracy.
 #            Setup/Hyperparameters          #
 #############################################
 
-import os
-import sys
-import math
-import uuid
-from math import ceil
-
 import torch
 from torch import nn
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as T
 
-from airbench import evaluate, infer, CifarLoader
+from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
@@ -66,7 +60,6 @@ hyp = {
         },
         'batchnorm_momentum': 0.9,
         'scaling_factor': 1/9,
-#         'scaling_factor': 1/2,
         'tta_level': 2,
     },
 }
@@ -198,7 +191,6 @@ def train(train_loader,
     loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing, reduction='none')
     total_train_steps = int(epochs * len(train_loader))
 
-
     params = [(k, p) for k, p in model.named_parameters() if p.requires_grad]
     norm_params = [p for k, p in params if 'norm' in k]
     other_params = [p for k, p in params if ('norm' not in k) and len(p.shape) != 4]
@@ -207,19 +199,17 @@ def train(train_loader,
                                   dict(params=other_params, lr=lr, weight_decay=wd/lr)], momentum=momentum, nesterov=True)
     from renorm_sgd import RenormSGD
     optimizer2 = RenormSGD([dict(params=filter_params, lr=0.07, weight_decay=0)], momentum=momentum, nesterov=True)
-
-    def triangle(steps, start=0, end=0, peak=0.5):
-        xp = torch.tensor([0, int(peak * steps), steps])
-        fp = torch.tensor([start, 1, end])
-        x = torch.arange(1+steps)
-        m = (fp[1:] - fp[:-1]) / (xp[1:] - xp[:-1])
-        b = fp[:-1] - (m * xp[:-1])
-        indices = torch.sum(torch.ge(x[:, None], xp[None, :]), 1) - 1 
-        indices = torch.clamp(indices, 0, len(m) - 1)
-        return m[indices] * x + b[indices]
-    lr_schedule = triangle(total_train_steps, start=0.2, end=0, peak=0.2)
-    scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, lambda i: lr_schedule[i])
-    scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, lambda i: lr_schedule[i])
+    def get_lr(step):
+        warmup_steps = int(total_train_steps * 0.2)
+        warmdown_steps = total_train_steps - warmup_steps
+        if step < warmup_steps:
+            frac = step / warmup_steps
+            return 0.2 * (1 - frac) + 1.0 * frac
+        else:
+            frac = (step - warmup_steps) / warmdown_steps
+            return (1 - frac)
+    scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
+    scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
 
     ####################
     #     Training     #
@@ -229,7 +219,7 @@ def train(train_loader,
 
     model.train()
     from tqdm import tqdm
-    for epoch in tqdm(range(ceil(epochs))):
+    for epoch in tqdm(range(epochs)):
         for inputs, labels in train_loader:
 
             outputs = model(inputs)
@@ -250,7 +240,7 @@ def train(train_loader,
     return model
 
 if __name__ == '__main__':
-    train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=dict(flip=True, translate=2), altflip=True)
+    train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
     model = train(train_loader)
