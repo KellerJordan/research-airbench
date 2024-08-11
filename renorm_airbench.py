@@ -5,7 +5,11 @@ Variant of airbench94 which removes the following:
 * Lookahead optimization
 * Progressive freezing
 
-+imports the dataloader.
+And increases the training duration slightly via the following:
+* Epochs 9.9 -> 10.0
+* Batch size 1024 -> 1000
+
++imports the dataloader from airbench package.
 
 And adds renormalized SGD as the optimizer.
 
