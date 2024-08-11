@@ -214,11 +214,9 @@ def train(train_loader):
     return model
 
 if __name__ == '__main__':
-    train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'],
-                               aug=hyp['aug'], altflip=True)
+    train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
-    model = train(train_loader)
-    acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
-    print(acc)
+    print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
 
