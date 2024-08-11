@@ -46,7 +46,6 @@ hyp = {
             'block2': 256,
             'block3': 256,
         },
-        'batchnorm_momentum': 0.9,
         'scaling_factor': 1/9,
         'tta_level': 2,
     },
@@ -68,9 +67,9 @@ class Mul(nn.Module):
         return x * self.scale
 
 class BatchNorm(nn.BatchNorm2d):
-    def __init__(self, num_features, momentum, eps=1e-12,
+    def __init__(self, num_features, eps=1e-12,
                  weight=False, bias=True):
-        super().__init__(num_features, eps=eps, momentum=1-momentum)
+        super().__init__(num_features, eps=eps)
         self.weight.requires_grad = weight
         self.bias.requires_grad = bias
         # Note that PyTorch already initializes the weights to one and bias to zero
@@ -87,13 +86,13 @@ class Conv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
 
 class ConvGroup(nn.Module):
-    def __init__(self, channels_in, channels_out, batchnorm_momentum):
+    def __init__(self, channels_in, channels_out):
         super().__init__()
         self.conv1 = Conv(channels_in,  channels_out)
         self.pool = nn.MaxPool2d(2)
-        self.norm1 = BatchNorm(channels_out, batchnorm_momentum)
+        self.norm1 = BatchNorm(channels_out)
         self.conv2 = Conv(channels_out, channels_out)
-        self.norm2 = BatchNorm(channels_out, batchnorm_momentum)
+        self.norm2 = BatchNorm(channels_out)
         self.activ = nn.GELU()
 
     def forward(self, x):
@@ -132,15 +131,16 @@ eigenvectors_scaled = torch.tensor([
 -1.2133e+01,  1.2133e+01,  1.2148e+01, -1.2148e+01,  7.4141e+00, -7.4180e+00, -7.4219e+00,  7.4297e+00,
 ]).reshape(12, 3, 2, 2)
 
-def make_net(widths=hyp['net']['widths'], batchnorm_momentum=hyp['net']['batchnorm_momentum']):
+def make_net():
+    widths = hyp['net']['widths']
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
     net = nn.Sequential(
         Conv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
         nn.GELU(),
-        ConvGroup(whiten_width,     widths['block1'], batchnorm_momentum),
-        ConvGroup(widths['block1'], widths['block2'], batchnorm_momentum),
-        ConvGroup(widths['block2'], widths['block3'], batchnorm_momentum),
+        ConvGroup(whiten_width,     widths['block1']),
+        ConvGroup(widths['block1'], widths['block2']),
+        ConvGroup(widths['block2'], widths['block3']),
         nn.MaxPool2d(3),
         Flatten(),
         nn.Linear(widths['block3'], 10, bias=False),
@@ -159,25 +159,22 @@ def make_net(widths=hyp['net']['widths'], batchnorm_momentum=hyp['net']['batchno
 #          Training and Inference          #
 ############################################
 
-def train(train_loader,
-          label_smoothing=hyp['opt']['label_smoothing'], epochs=hyp['opt']['epochs'],
-          learning_rate=hyp['opt']['lr'], weight_decay=hyp['opt']['weight_decay'], momentum=hyp['opt']['momentum'],
-          bias_scaler=hyp['opt']['bias_scaler']):
+def train(train_loader):
 
-    model = make_net()
-    train_loader.epoch = 0 
-
+    momentum = hyp['opt']['momentum']
+    epochs = hyp['opt']['epochs']
     # Assuming gradients are constant in time, for Nesterov momentum, the below ratio is how much
     # larger the default steps will be than the underlying per-example gradients. We divide the
     # learning rate by this ratio in order to ensure steps are the same scale as gradients, regardless
     # of the choice of momentum.
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
-    lr = learning_rate / kilostep_scale # un-decoupled learning rate for PyTorch SGD
-    wd = weight_decay * train_loader.batch_size / kilostep_scale
-    lr_biases = lr * bias_scaler
+    lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
+    wd = hyp['opt']['weight_decay'] * train_loader.batch_size / kilostep_scale
+    lr_biases = lr * hyp['opt']['bias_scaler']
 
-    loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing, reduction='none')
-    total_train_steps = int(epochs * len(train_loader))
+    model = make_net()
+    loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
+    total_train_steps = epochs * len(train_loader)
 
     params = [(k, p) for k, p in model.named_parameters() if p.requires_grad]
     norm_params = [p for k, p in params if 'norm' in k]
@@ -199,12 +196,8 @@ def train(train_loader,
     scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
     scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
 
-    ####################
-    #     Training     #
-    ####################
-
-    current_steps = 0 
-
+    current_steps = 0
+    train_loader.epoch = 0
     model.train()
     from tqdm import tqdm
     for epoch in tqdm(range(epochs)):
@@ -231,7 +224,6 @@ if __name__ == '__main__':
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
-    model = train(train_loader)
-    print(evaluate(model, test_loader, tta_level=hyp['net']['tta_level']))
+    print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
     print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
 
