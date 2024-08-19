@@ -4,6 +4,7 @@ Things which didn't help:
 * Using gamma/beta affine scale/shift coefficients after the convs, like NFNet
 * Using 0.85 instead of 0.9 momentum (with batch size set to 500 as it is)
 * Turning off label smoothing (reduces from 92.9 to 92.5)
+* Warming up from zero instead of from 0.2 (93.0 -> 92.9, not quite stat sig)
 """
 
         
@@ -239,8 +240,8 @@ def train(train_loader):
         warmdown_steps = total_train_steps - warmup_steps
         if step < warmup_steps:
             frac = step / warmup_steps
-            return frac
-            #return 0.2 * (1 - frac) + 1.0 * frac
+            #return frac
+            return 0.2 * (1 - frac) + 1.0 * frac
         else:
             frac = (step - warmup_steps) / warmdown_steps
             return (1 - frac)
