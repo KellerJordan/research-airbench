@@ -8,6 +8,8 @@ Things which didn't help:
 * Turning off tta from 2 to 0 (93.7 -> 93.0)
 Result: at lr=0.03, we got 93.69 in n=50.
 Result: now with both non-filters at lr=0.01, got 93.70 in n=50.
+* Blows up with non-filters at lr=0.02.
+Result: now with both non-filters at lr=0.005, got 93.76 in n=50.
 """
 
 #############################################
@@ -120,7 +122,8 @@ def renorm_sgd(params: List[Tensor],
 
         # filter-wise normalization
         shape = [len(d_p)]+[1]*(len(d_p.shape)-1)
-        d_p_hat = d_p / d_p.reshape(len(d_p), -1).norm(dim=1).view(*shape)
+        grad_scale = d_p.reshape(len(d_p), -1).norm(dim=1)
+        d_p_hat = d_p / grad_scale.view(*shape)
         param.data.add_(d_p_hat, alpha=-lr)
         param.data.div_(param.data.reshape(len(param), -1).norm(dim=1).view(*shape))
 
@@ -215,7 +218,7 @@ def make_net():
     return net
 
 #############################################
-#          Training and evaluation          #
+#          Training and Evaluation          #
 #############################################
 
 def train(train_loader):
@@ -228,7 +231,7 @@ def train(train_loader):
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     other_params = [p for p in model.parameters() if len(p.shape) < 4 and p.requires_grad]
     optimizer1 = RenormSGD(filter_params, lr=0.03, momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer2 = torch.optim.SGD(other_params, lr=0.01, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer2 = torch.optim.SGD(other_params, lr=0.005, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
@@ -266,8 +269,8 @@ def train(train_loader):
 
 if __name__ == '__main__':
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
-    test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
+    test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(10)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
 
