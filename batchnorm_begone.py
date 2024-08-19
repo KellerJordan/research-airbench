@@ -2,6 +2,7 @@
 Things which didn't help:
 * Doing full-parameter normalization instead of filter-wise (this was much less stable)
 * Using gamma/beta affine scale/shift coefficients after the convs, like NFNet
+* Using 0.85 instead of 0.9 momentum (with batch size set to 500 as it is)
 """
 
         
@@ -28,6 +29,7 @@ torch.backends.cudnn.benchmark = True
 hyp = {
     'opt': {
         'epochs': 15,
+        'momentum': 0.9,
         'batch_size': 500,
         'label_smoothing': 0.0,
     },
@@ -229,8 +231,8 @@ def train(train_loader):
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     linear_params = [p for p in model.parameters() if len(p.shape) == 2 and p.requires_grad]
     optimizer1 = torch.optim.SGD([dict(params=conv0_bias, lr=0.005),
-                                  dict(params=linear_params, lr=0.01)], momentum=0.9, nesterov=True)
-    optimizer2 = RenormSGD(filter_params, lr=0.025, momentum=0.9, nesterov=True)
+                                  dict(params=linear_params, lr=0.01)], momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer2 = RenormSGD(filter_params, lr=0.025, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
