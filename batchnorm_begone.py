@@ -6,14 +6,8 @@ Things which didn't help:
 * Turning off label smoothing (reduces from 92.9 to 92.5)
 * Warming up from zero instead of from 0.2 (93.0 -> 92.9, not quite stat sig)
 * Turning off tta from 2 to 0 (93.7 -> 93.0)
+Result: at lr=0.03, we got 93.69 in n=50.
 """
-
-        
-import os
-from tqdm import tqdm
-import uuid
-import torch
-import airbench
 
 #############################################
 #            Setup/Hyperparameters          #
@@ -235,13 +229,12 @@ def train(train_loader):
     linear_params = [p for p in model.parameters() if len(p.shape) == 2 and p.requires_grad]
     optimizer1 = torch.optim.SGD([dict(params=conv0_bias, lr=0.005),
                                   dict(params=linear_params, lr=0.01)], momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer2 = RenormSGD(filter_params, lr=0.025, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer2 = RenormSGD(filter_params, lr=0.03, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
         if step < warmup_steps:
             frac = step / warmup_steps
-            #return frac
             return 0.2 * (1 - frac) + 1.0 * frac
         else:
             frac = (step - warmup_steps) / warmdown_steps
@@ -277,5 +270,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(10)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
 
