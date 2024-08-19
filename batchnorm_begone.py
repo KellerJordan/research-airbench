@@ -7,6 +7,7 @@ Things which didn't help:
 * Warming up from zero instead of from 0.2 (93.0 -> 92.9, not quite stat sig)
 * Turning off tta from 2 to 0 (93.7 -> 93.0)
 Result: at lr=0.03, we got 93.69 in n=50.
+Result: now with both non-filters at lr=0.01, got 93.70 in n=50.
 """
 
 #############################################
@@ -224,11 +225,9 @@ def train(train_loader):
     model = make_net()
     total_train_steps = epochs * len(train_loader)
 
-    conv0_bias = [model[0].bias]
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
-    linear_params = [p for p in model.parameters() if len(p.shape) == 2 and p.requires_grad]
-    optimizer1 = torch.optim.SGD([dict(params=conv0_bias, lr=0.005),
-                                  dict(params=linear_params, lr=0.01)], momentum=hyp['opt']['momentum'], nesterov=True)
+    other_params = [p for p in model.parameters() if len(p.shape) < 4 and p.requires_grad]
+    optimizer1 = torch.optim.SGD(other_params, lr=0.01, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = RenormSGD(filter_params, lr=0.03, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
@@ -270,5 +269,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False, batch_size=1000)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(10)])))
 
