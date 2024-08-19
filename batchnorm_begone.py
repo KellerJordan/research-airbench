@@ -227,8 +227,8 @@ def train(train_loader):
 
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     other_params = [p for p in model.parameters() if len(p.shape) < 4 and p.requires_grad]
-    optimizer1 = torch.optim.SGD(other_params, lr=0.01, momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer2 = RenormSGD(filter_params, lr=0.03, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer1 = RenormSGD(filter_params, lr=0.03, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer2 = torch.optim.SGD(other_params, lr=0.01, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
