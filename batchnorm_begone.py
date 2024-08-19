@@ -5,6 +5,7 @@ Things which didn't help:
 * Using 0.85 instead of 0.9 momentum (with batch size set to 500 as it is)
 * Turning off label smoothing (reduces from 92.9 to 92.5)
 * Warming up from zero instead of from 0.2 (93.0 -> 92.9, not quite stat sig)
+* Turning off tta from 2 to 0 (93.7 -> 93.0)
 """
 
         
@@ -46,7 +47,7 @@ hyp = {
             'block3': 256,
         },
         'scaling_factor': 1/9,
-        'tta_level': 0,
+        'tta_level': 2,
     },
 }
 
