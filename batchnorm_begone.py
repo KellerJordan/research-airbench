@@ -3,6 +3,7 @@ Things which didn't help:
 * Doing full-parameter normalization instead of filter-wise (this was much less stable)
 * Using gamma/beta affine scale/shift coefficients after the convs, like NFNet
 * Using 0.85 instead of 0.9 momentum (with batch size set to 500 as it is)
+* Turning off label smoothing (reduces from 92.9 to 92.5)
 """
 
         
@@ -31,7 +32,7 @@ hyp = {
         'epochs': 15,
         'momentum': 0.9,
         'batch_size': 500,
-        'label_smoothing': 0.0,
+        'label_smoothing': 0.2,
     },
     'aug': {
         'flip': True,
@@ -239,6 +240,7 @@ def train(train_loader):
         if step < warmup_steps:
             frac = step / warmup_steps
             return frac
+            #return 0.2 * (1 - frac) + 1.0 * frac
         else:
             frac = (step - warmup_steps) / warmdown_steps
             return (1 - frac)
