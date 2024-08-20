@@ -1,11 +1,13 @@
 """
 casted_airbench.py
 
-Accuracy: 93.95 in n=50 (with 3 bits, same as full-precision)
+Accuracy: 93.95 in n=50
 
-At other precisions:
+At various precisions:
+* bits=3 -> 93.95 (n=50)
 * bits=2 -> 93.95 (n=50)
 * bits=1 -> 93.86 (n=50)
+* bits=0 -> 93.67 (n=50)
 
 """
 
@@ -45,7 +47,11 @@ hyp = {
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
-        'conv_precision': 3,
+        'conv_precision': {
+            'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
+            'upper_bound': None,
+            'lower_bound': None,
+        }
     },
 }
 
@@ -77,8 +83,10 @@ class BatchNorm(nn.BatchNorm2d):
 # Note that this is a "simulation" of actual low-precision casting, i.e., we leave the weights in their
 # incoming hardware datatype; what changes is just that we round the values to the nearest valid
 # values at the lower precision.
-def cast_weight(w, bits, eps=1.7881e-07):
+def cast_weight(w, bits, a, b, eps=1.7881e-07):
     w = w.clone()
+    if (a is not None) and (b is not None):
+        w = w.sign() * w.abs().clamp(a, b)
     w[w == 0] = eps
 
     log2 = torch.tensor(2.).log().cuda()
@@ -90,10 +98,8 @@ def cast_weight(w, bits, eps=1.7881e-07):
     return new_value.to(w.dtype)
         
 class CastedConv(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False,
-                 bits=hyp['net']['conv_precision']):
+    def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False):
         super().__init__(in_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=bias)
-        self.bits = bits
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -103,10 +109,13 @@ class CastedConv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
         
     def forward(self, x):
-        if self.bits is not None:
+        bits = hyp['net']['conv_precision']['bits']
+        a = hyp['net']['conv_precision']['lower_bound']
+        b = hyp['net']['conv_precision']['upper_bound']
+        if bits is not None:
             # This uses the casted weights for both forward and backward pass,
             # while the updates go to the actual high precision weights
-            w_casted = cast_weight(self.weight, self.bits)
+            w_casted = cast_weight(self.weight, bits, a, b)
             w = self.weight + (w_casted - self.weight.detach())
             return F.conv2d(x, w, padding=self.padding, bias=self.bias)
         else:
