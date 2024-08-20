@@ -70,6 +70,10 @@ Therefore overall we can reach the following conclusions.
 * We need 2 bits of range for the weights.
     - Reducing to 1 bit of range -> -0.25%
 
+Now with new tech for the bottom of the range. If you're below a then round to either 0 or a.
+Previously it was just rounding down to 0 always.
+* (lg a, lg b) = (-6, 0) ->
+
 """
 
 #############################################
@@ -158,7 +162,7 @@ def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
     casted_x = frac_newfp * 2**exp
     if a is not None:
         casted_x[x.abs() < a/2] = 0
-        casted_x[(x.abs() >= a/2) & (x.abs() < a)] = a
+        casted_x[(x.abs() >= a/2) & (x.abs() < a)] = a * x.sign()
     casted_x = casted_x.to(tensor.dtype)
 
     # let the gradients flow through the original tensor
