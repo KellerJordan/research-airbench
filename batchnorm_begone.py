@@ -23,6 +23,12 @@ Weight decay on the non-filters doesn't help
 * wd=0.2 -> 93.61(10)
 * wd=0.5 -> 93.51(10)
 
+Now bs=1000
+* lr=0.03 -> 93.07(10)
+* lr=0.04 -> 92.96(10)
+* lr=0.03, non-filter lr=5/bs -> garbage
+* momentum=0.85 -> 92.58(10)
+
 Now bs=1000 epochs=30
 * lr=0.03 -> 93.97(10)
 * lr=0.04 -> 94.16(10)
