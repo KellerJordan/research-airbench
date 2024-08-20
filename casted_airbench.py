@@ -88,6 +88,20 @@ now with whitening layer in bits=2
 * bits=0 a=b=2**-2 -> 92.66 (10) [wd=0.01 -> 92.75 (25)] [~triple compute, adjust lr -> 93.75 (25)] [2.25x compute, adjust lr -> 93.59]
 * bits=0 a=b=2**-3 -> 92.67 (10) [wd=0.01 -> 92.69 (25)] [triple compute, adjust lr -> 93.79 (25)]
 
+Now scaling ternary networks further. Ternary means bits=0 a=b=2**-2
+* ternary 2.25x width -> 94.20 (n=10) [lr=10, wd=0.012]
+* ternary 1.5x width -> 93.66 (n=10) [lr=8, wd=0.012]
+* ternary 1x width -> 92.75 (n=25) [wd=0.010]
+* full-precision 2.25x width -> ~94.5
+* full-precision 1.5x width -> 94.13 (n=10) [lr=8, wd=0.012]
+* full-precision 1x width -> 93.56 (n=50)
+* full-precision 0.67x width -> 92.63 (n=25)
+Here's suboptimal parameters
+* ternary 2.25x width -> 94.07 (n=10) [lr=6, wd=0.009]
+* ternary 2.25x width -> 94.03 (n=10) [lr=10, wd=0.015]
+* ternary 1.5x width -> 93.62 (n=10) [lr=10, wd=0.015]
+* ternary 1.5x width -> 93.64 (n=10) [lr=10, wd=0.012]
+
 These last networks were ternary. They apparently perform as well as ~2.25x-larger full precision networks.
 This the same result that we can see in the training loss reported by the 1.58-bit paper.
 https://github.com/microsoft/unilm/blob/master/bitnet/The-Era-of-1-bit-LLMs__Training_Tips_Code_FAQ.pdf
@@ -131,7 +145,7 @@ hyp = {
         'tta_level': 2,
         'conv_precision': {
             'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': 2**0,
+            'upper_bound': 2**10,
             'lower_bound': 2**-10,
         }
     },
@@ -201,7 +215,13 @@ class CastedConv(nn.Conv2d):
         a = hyp['net']['conv_precision']['lower_bound']
         b = hyp['net']['conv_precision']['upper_bound']
         if len(self.weight) == 24:
+            a = None
             b = None
+            bits = 4
+        else:
+            s = self.weight.size(1)**0.5
+            a = a / s
+            b = b / s
         if bits is not None:
             # This uses the casted weights for both forward and backward pass,
             # while the updates go to the actual high precision weights
