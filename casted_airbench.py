@@ -9,6 +9,11 @@ At various precisions:
 * bits=1 -> 93.86 (n=50)
 * bits=0 -> 93.67 (n=50)
 
+What if we leave the whitening convolution in bits=2?
+* a=2**-8 bits=0 -> 93.76 (n=30)
+What if we leave all the convolutions with <= 64 filters in bits=2?
+* a=2**-8 bits=0 -> 93.80 (n=20)
+
 Now always with bits=2, ablating over the bounds
 * (lg a, lg b) = (-inf, 2) -> 93.90 (n=50)
 * (lg a, lg b) = (-inf, 3) -> 93.93 (n=50)
@@ -31,6 +36,12 @@ What if we don't upper-bound the first weight (which is the whitening layer)?
 * (lg a, lg b) = (-inf, -1) -> 93.95 (n=50)
 * (lg a, lg b) = (-inf, -2) -> 93.73 (n=10)
 * (lg a, lg b) = (-inf, -3) -> 93.58 (n=10)
+* (lg a, lg b) = (-10, 0) -> 93.94 (n=50)
+
+Final settings
+* w_bits=2 a=2**-8 b=1 -> 93.90 (n=50)
+* w_bits=2 a=2**-10 b=1 ->  (n=50)
+* x_bits=5 w_bits=2 a=2**-8 b=1 ->
 
 """
 
@@ -73,7 +84,7 @@ hyp = {
         'conv_precision': {
             'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
             'upper_bound': 2**0,
-            'lower_bound': 2**-8,
+            'lower_bound': 2**-10,
         }
     },
 }
