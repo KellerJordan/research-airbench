@@ -187,7 +187,7 @@ def train(train_loader):
     optimizer1 = torch.optim.SGD([dict(params=norm_params, lr=lr_biases, weight_decay=wd/lr_biases),
                                   dict(params=other_params, lr=lr, weight_decay=wd/lr)], momentum=momentum, nesterov=True)
     from renorm_sgd import RenormSGD
-    optimizer2 = RenormSGD([dict(params=filter_params, lr=0.07, weight_decay=0)], momentum=momentum, nesterov=True)
+    optimizer2 = RenormSGD([dict(params=filter_params, lr=0.07)], momentum=momentum, nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
