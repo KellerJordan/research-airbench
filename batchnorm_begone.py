@@ -1,37 +1,5 @@
 """
-Things which didn't help:
-* Doing full-parameter normalization instead of filter-wise (this was much less stable)
-* Using gamma/beta affine scale/shift coefficients after the convs, like NFNet
-* Using 0.85 instead of 0.9 momentum (with batch size set to 500 as it is)
-* Turning off label smoothing (reduces from 92.9 to 92.5)
-* Warming up from zero instead of from 0.2 (93.0 -> 92.9, not quite stat sig)
-* Turning off tta from 2 to 0 (93.7 -> 93.0)
-Result: at lr=0.03, we got 93.69 in n=50.
-Result: now with both non-filters at lr=0.01, got 93.70 in n=50.
-* Blows up with non-filters at lr=0.02.
-Result: now with both non-filters at lr=0.005, got 93.76 in n=50.
-Result: now projecting out the parallel direction, got 93.74 in n=50.
-
-Learning rate for filters
-* lr=0.03 -> 93.74(50)
-* lr=0.04 -> 93.57(50)
-
-Weight decay on the non-filters doesn't help
-* wd=0.0 -> 93.74(50)
-* wd=0.05 -> 93.71(10)
-* wd=0.1 -> 93.73(10)
-* wd=0.2 -> 93.61(10)
-* wd=0.5 -> 93.51(10)
-
-Now bs=1000
-* lr=0.03 -> 93.07(10)
-* lr=0.04 -> 92.96(10)
-* lr=0.03, non-filter lr=5/bs -> garbage
-* momentum=0.85 -> 92.58(10)
-
-Now bs=1000 epochs=30
-* lr=0.03 -> 93.97(10)
-* lr=0.04 -> 94.16(10)
+gets around ~94% with TTA
 """
 
 #############################################
@@ -50,7 +18,7 @@ torch.backends.cudnn.benchmark = True
 
 hyp = {
     'opt': {
-        'epochs': 15,
+        'epochs': 20,
         'momentum': 0.9,
         'batch_size': 500,
         'label_smoothing': 0.2,
