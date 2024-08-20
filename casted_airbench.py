@@ -62,7 +62,6 @@ Again let w_bits=2 and unlimited range be the default.
 * a=2**-5 b=2**-1 -> 93.51 (n=50)
 * a=2**-6 b=2**-2 -> 93.35 (n=25)
 * a=2**-3 b=2**-1 -> 93.29 (n=25)
-* w_bits=1 a=2**-3 b=2**-1 -> (n=50)
 
 Therefore overall we can reach the following conclusions.
 * We need 2 bits of precision for the weights and 4 bits for the activations.
@@ -72,7 +71,20 @@ Therefore overall we can reach the following conclusions.
 
 Now with new tech for the bottom of the range. If you're below a then round to either 0 or a.
 Previously it was just rounding down to 0 always.
-* (lg a, lg b) = (-6, 0) ->
+* default -> 93.94 (n=50)
+* a=2**-6 -> 93.56 (n=25) [this improves significantly over the prior result of 93.29]
+
+Now also with removing dirac and relative-to-sqrt tech etc.
+* a=2**-5 b=2**-1 -> 93.55 (n=25)
+* a=2**-3 b=2**-1 -> 93.40 (n=25) [again improving over prior result]
+* bits=1 a=2**-5 b=2**-1 -> 93.49 (n=25)
+* bits=1 a=2**-3 b=2**-1 -> 93.36 (n=25)
+* bits=0 a=2**-5 b=2**-1 -> 93.26 (n=25)
+* bits=0 a=2**-3 b=2**-1 -> 93.22 (n=25)
+* bits=0 a=2**-2 b=2**-1 -> 92.81 (n=25)
+* bits=0 a=2**-3 b=2**-2 -> 93.06 (n=25)
+* bits=0 a=b=2**-3 -> 92.56 (n=25)
+* bits=0 a=b=2**-2 -> 92.63 (n=25)
 
 """
 
