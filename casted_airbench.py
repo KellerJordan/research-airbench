@@ -281,5 +281,5 @@ if __name__ == '__main__':
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
     print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
-                                       for _ in range(20)])))
+                                       for _ in range(50)])))
 
