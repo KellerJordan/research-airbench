@@ -44,10 +44,23 @@ Final settings. Assume w_bits=2 a=2**-10 b=2**0 unless otherwise specified.
 * x_bits=5 a=2**-8 -> 93.84 (n=50)
 * w_bits=1 x_bits=5 -> 93.83 (n=50)
 * a=2**-8 -> 93.90 (n=50)
-* x_bits=8 ->  (n=50)
+* x_bits=8 -> 93.95 (n=50)
 * x_bits=5 -> 93.89 (n=50)
 * x_bits=4 -> 93.89 (n=50)
 * x_bits=3 -> 93.80 (n=50)
+
+Now let's remove the dirac initialization so that we can shrink the range.
+Parametrize a and b so that they are multiplied by 1/d**0.5 where d is the number
+of incoming channels (so the average PT init would be (1/(3*3)*3)**0.5 times this).
+Again let w_bits=2 and unlimited range be the default.
+* default -> 93.56 (n=50)
+* a=2**-4 b=2**4 -> 93.49 (n=50)
+* a=2**-10 b=2**10 -> 93.55 (n=50)
+* a=2**-6 b=2**2 -> 93.55 (n=25)
+* a=2**-6 b=2**0 -> 93.61 (n=25)
+* a=2**-6 b=2**-1 -> 93.57 (n=25)
+* a=2**-5 b=2**-1 -> 93.57 (n=25)
+* a=2**-6 b=2**-2 -> 93.35 (n=25)
 
 """
 
