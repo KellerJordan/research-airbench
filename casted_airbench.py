@@ -49,8 +49,8 @@ hyp = {
         'tta_level': 2,
         'conv_precision': {
             'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': None,
-            'lower_bound': None,
+            'upper_bound': 8,
+            'lower_bound': 0,
         }
     },
 }
@@ -85,8 +85,8 @@ class BatchNorm(nn.BatchNorm2d):
 # values at the lower precision.
 def cast_weight(w, bits, a, b, eps=1.7881e-07):
     w = w.clone()
-    if (a is not None) and (b is not None):
-        w = w.sign() * w.abs().clamp(a, b)
+    if b is not None:
+        w = w.sign() * w.abs().clamp(0, b)
     w[w == 0] = eps
 
     log2 = torch.tensor(2.).log().cuda()
@@ -95,6 +95,8 @@ def cast_weight(w, bits, a, b, eps=1.7881e-07):
     frac_newfp = frac.sign() * (1 + (2**bits * (frac.abs() - 1)).round() / 2**bits)
     
     new_value = frac_newfp * 2**exp
+    if a is not None:
+        new_value[new_value.abs() < a] = 0
     return new_value.to(w.dtype)
         
 class CastedConv(nn.Conv2d):
@@ -253,5 +255,6 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
+                                       for _ in range(50)])))
 
