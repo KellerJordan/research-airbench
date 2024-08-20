@@ -11,7 +11,7 @@ And increases the training duration slightly via the following:
 
 +imports the dataloader from airbench package.
 
-Attains 93.95 mean accuracy.
+Attains 93.97 mean accuracy (n=200).
 """
 
 #############################################
