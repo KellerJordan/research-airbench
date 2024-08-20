@@ -162,7 +162,8 @@ def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
     casted_x = frac_newfp * 2**exp
     if a is not None:
         casted_x[x.abs() < a/2] = 0
-        casted_x[(x.abs() >= a/2) & (x.abs() < a)] = a * x.sign()
+        mask = (x.abs() >= a/2) & (a.bs() < a)
+        casted_x[mask] = a * x.sign()[mask]
     casted_x = casted_x.to(tensor.dtype)
 
     # let the gradients flow through the original tensor
