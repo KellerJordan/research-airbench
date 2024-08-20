@@ -144,7 +144,7 @@ class BatchNorm(nn.BatchNorm2d):
 # Note that this is a "simulation" of actual low-precision casting, i.e., we leave the weights in their
 # incoming hardware datatype; what changes is just that we round the values to the nearest valid
 # values at the lower precision.
-def cast_tensor(tensor, bits, a=None, b=None, eps=1.7881e-07):
+def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
     x = tensor.clone()
     if b is not None:
         x = x.sign() * x.abs().clamp(0, b)
@@ -157,7 +157,8 @@ def cast_tensor(tensor, bits, a=None, b=None, eps=1.7881e-07):
 
     casted_x = frac_newfp * 2**exp
     if a is not None:
-        casted_x[casted_x.abs() < a] = 0
+        casted_x[x.abs() < a/2] = 0
+        casted_x[(x.abs() >= a/2) & (x.abs() < a)] = a
     casted_x = casted_x.to(tensor.dtype)
 
     # let the gradients flow through the original tensor
