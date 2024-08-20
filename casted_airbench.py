@@ -85,9 +85,12 @@ oops the below are mistaken because I didn't keep the whitening layer in bits=2
 * bits=0 a=2**-2 b=2**-1 -> 92.81 (n=25)
 * bits=0 a=2**-3 b=2**-2 -> 93.06 (n=25)
 now with whitening layer in bits=2
-* bits=0 a=b=2**-2 -> 92.66 (10) [wd=0.01 -> 92.75 (25)]
-* bits=0 a=b=2**-3 -> 92.67 (10) [wd=0.01 -> 92.69 (25)]
+* bits=0 a=b=2**-2 -> 92.66 (10) [wd=0.01 -> 92.75 (25)] [~triple compute, adjust lr -> 93.75 (25)] [2.25x compute, adjust lr -> 93.59]
+* bits=0 a=b=2**-3 -> 92.67 (10) [wd=0.01 -> 92.69 (25)] [triple compute, adjust lr -> 93.79 (25)]
 
+These last networks were ternary. They apparently perform as well as ~2.25x-larger full precision networks.
+This the same result that we can see in the training loss reported by the 1.58-bit paper.
+https://github.com/microsoft/unilm/blob/master/bitnet/The-Era-of-1-bit-LLMs__Training_Tips_Code_FAQ.pdf
 """
 
 #############################################
