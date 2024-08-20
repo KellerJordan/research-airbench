@@ -29,6 +29,8 @@ What if we don't upper-bound the first weight (which is the whitening layer)?
 * (lg a, lg b) = (-inf, 1) -> 93.90 (n=20)
 * (lg a, lg b) = (-inf, 0) -> 93.98 (n=20)
 * (lg a, lg b) = (-inf, -1) -> 93.89 (n=20)
+* (lg a, lg b) = (-inf, -2) -> 93.73 (n=10)
+* (lg a, lg b) = (-inf, -3) -> 93.58 (n=10)
 
 """
 
@@ -70,8 +72,8 @@ hyp = {
         'tta_level': 2,
         'conv_precision': {
             'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': 1/2,
-            'lower_bound': 0,
+            'upper_bound': 1,
+            'lower_bound': 2**-8,
         }
     },
 }
