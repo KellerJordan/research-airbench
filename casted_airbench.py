@@ -77,14 +77,16 @@ Previously it was just rounding down to 0 always.
 Now also with removing dirac and relative-to-sqrt tech etc.
 * a=2**-5 b=2**-1 -> 93.55 (n=25)
 * a=2**-3 b=2**-1 -> 93.40 (n=25) [again improving over prior result]
+oops the below are mistaken because I didn't keep the whitening layer in bits=2
 * bits=1 a=2**-5 b=2**-1 -> 93.49 (n=25)
 * bits=1 a=2**-3 b=2**-1 -> 93.36 (n=25)
 * bits=0 a=2**-5 b=2**-1 -> 93.26 (n=25)
 * bits=0 a=2**-3 b=2**-1 -> 93.22 (n=25)
 * bits=0 a=2**-2 b=2**-1 -> 92.81 (n=25)
 * bits=0 a=2**-3 b=2**-2 -> 93.06 (n=25)
-* bits=0 a=b=2**-3 -> 92.56 (n=25)
-* bits=0 a=b=2**-2 -> 92.63 (n=25)
+now with whitening layer in bits=2
+* bits=0 a=b=2**-2 -> 92.66 (10) [wd=0.01 -> 92.75 (25)]
+* bits=0 a=b=2**-3 -> 92.67 (10) [wd=0.01 -> 92.69 (25)]
 
 """
 
