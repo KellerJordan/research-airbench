@@ -11,6 +11,7 @@ At various precisions:
 
 What if we leave the whitening convolution in bits=2?
 * a=2**-8 bits=0 -> 93.76 (n=30)
+* bits=0 -> 93.73 (n=50)
 What if we leave all the convolutions with <= 64 filters in bits=2?
 * a=2**-8 bits=0 -> 93.80 (n=20)
 
@@ -38,10 +39,15 @@ What if we don't upper-bound the first weight (which is the whitening layer)?
 * (lg a, lg b) = (-inf, -3) -> 93.58 (n=10)
 * (lg a, lg b) = (-10, 0) -> 93.94 (n=50)
 
-Final settings
-* w_bits=2 a=2**-8 b=1 -> 93.90 (n=50)
-* w_bits=2 a=2**-10 b=1 ->  (n=50)
-* x_bits=5 w_bits=2 a=2**-8 b=1 ->
+Final settings. Assume w_bits=2 a=2**-10 b=2**0 unless otherwise specified.
+* [default -> 93.94 (n=50)]
+* x_bits=5 a=2**-8 -> 93.84 (n=50)
+* w_bits=1 x_bits=5 -> 93.83 (n=50)
+* a=2**-8 -> 93.90 (n=50)
+* x_bits=8 ->  (n=50)
+* x_bits=5 -> 93.89 (n=50)
+* x_bits=4 -> 93.89 (n=50)
+* x_bits=3 -> 93.80 (n=50)
 
 """
 
@@ -117,7 +123,7 @@ class BatchNorm(nn.BatchNorm2d):
 # Note that this is a "simulation" of actual low-precision casting, i.e., we leave the weights in their
 # incoming hardware datatype; what changes is just that we round the values to the nearest valid
 # values at the lower precision.
-def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
+def cast_tensor(tensor, bits, a=None, b=None, eps=1.7881e-07):
     x = tensor.clone()
     if b is not None:
         x = x.sign() * x.abs().clamp(0, b)
