@@ -9,6 +9,13 @@ At various precisions:
 * bits=1 -> 93.86 (n=50)
 * bits=0 -> 93.67 (n=50)
 
+Now always with bits=2, ablating over the bounds
+* (lg a, lg b) = (-inf, 2) -> 93.90 (n=50)
+* (lg a, lg b) = (-inf, 3) -> 93.93 (n=50)
+* (lg a, lg b) = (-8, 3) -> 93.91 (n=50)
+* (lg a, lg b) = (-7, 3) -> 93.78 (n=50)
+* (lg a, lg b) = (-6, 3) -> 93.29 (n=50)
+
 """
 
 #############################################
@@ -49,7 +56,7 @@ hyp = {
         'tta_level': 2,
         'conv_precision': {
             'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': 8,
+            'upper_bound': 32,
             'lower_bound': 0,
         }
     },
