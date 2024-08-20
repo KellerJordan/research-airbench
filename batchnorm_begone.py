@@ -12,6 +12,10 @@ Result: now with both non-filters at lr=0.01, got 93.70 in n=50.
 Result: now with both non-filters at lr=0.005, got 93.76 in n=50.
 Result: now projecting out the parallel direction, got 93.74 in n=50.
 
+Learning rate for filters
+* lr=0.03 -> 93.74(50)
+* lr=0.04 -> 93.57(50)
+
 Weight decay on the non-filters doesn't help
 * wd=0.0 -> 93.74(50)
 * wd=0.05 -> 93.71(10)
