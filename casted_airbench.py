@@ -16,6 +16,15 @@ Now always with bits=2, ablating over the bounds
 * (lg a, lg b) = (-7, 3) -> 93.78 (n=50)
 * (lg a, lg b) = (-6, 3) -> 93.29 (n=50)
 
+What if we do stochastic rounding of the weights every batch, instead of deterministic?
+* It's terrible. Not sure if it would be better if we did it at the example level.
+
+What if we leave the weights 2-bit, and also cast the inputs?
+* bits=5 -> 93.89 (n=50)
+* bits=4 -> 93.89 (n=50)
+* bits=3 -> 93.82 (n=50)
+* bits=2 -> 93.63 (n=50)
+
 """
 
 #############################################
@@ -56,7 +65,7 @@ hyp = {
         'tta_level': 2,
         'conv_precision': {
             'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': 32,
+            'upper_bound': 128,
             'lower_bound': 0,
         }
     },
@@ -124,6 +133,8 @@ class CastedConv(nn.Conv2d):
         bits = hyp['net']['conv_precision']['bits']
         a = hyp['net']['conv_precision']['lower_bound']
         b = hyp['net']['conv_precision']['upper_bound']
+        if len(self.weight) == 24:
+            b = None
         if bits is not None:
             # This uses the casted weights for both forward and backward pass,
             # while the updates go to the actual high precision weights
