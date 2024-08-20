@@ -85,27 +85,30 @@ class BatchNorm(nn.BatchNorm2d):
         self.bias.requires_grad = bias
         # Note that PyTorch already initializes the weights to one and bias to zero
 
-# Reduces the precision of w to the give number of bits.
+# Reduces the precision of x to the given number of bits.
 # The number of bits for the exponent is unchanged.
 # Note that this is a "simulation" of actual low-precision casting, i.e., we leave the weights in their
 # incoming hardware datatype; what changes is just that we round the values to the nearest valid
 # values at the lower precision.
-def cast_weight(w, bits, a, b, eps=1.7881e-07):
-    w = w.clone()
+def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
+    x = tensor.clone()
     if b is not None:
-        w = w.sign() * w.abs().clamp(0, b)
-    w[w == 0] = eps
+        x = x.sign() * x.abs().clamp(0, b)
+    x[x == 0] = eps
 
     log2 = torch.tensor(2.).log().cuda()
-    exp = (w.float().abs().log() / log2).floor()
-    frac = w * 2**-exp
-    frac_newfp = frac.sign() * (1 + (2**bits * (frac.abs() - 1)).round() / 2**bits)
-    
-    new_value = frac_newfp * 2**exp
+    exp = (x.float().abs().log() / log2).floor()
+    frac = x * 2**-exp
+    frac_newfp = frac.sign() * (1 + torch.round(2**bits * (frac.abs() - 1)) / 2**bits)
+
+    casted_x = frac_newfp * 2**exp
     if a is not None:
-        new_value[new_value.abs() < a] = 0
-    return new_value.to(w.dtype)
-        
+        casted_x[casted_x.abs() < a] = 0
+    casted_x = casted_x.to(tensor.dtype)
+
+    # let the gradients flow through the original tensor
+    return casted_x.detach() + (tensor - tensor.detach())
+
 class CastedConv(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False):
         super().__init__(in_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=bias)
@@ -124,8 +127,7 @@ class CastedConv(nn.Conv2d):
         if bits is not None:
             # This uses the casted weights for both forward and backward pass,
             # while the updates go to the actual high precision weights
-            w_casted = cast_weight(self.weight, bits, a, b)
-            w = self.weight + (w_casted - self.weight.detach())
+            w = cast_tensor(self.weight, bits, a, b)
             return F.conv2d(x, w, padding=self.padding, bias=self.bias)
         else:
             return F.conv2d(x, self.weight, padding=self.padding, bias=self.bias)
