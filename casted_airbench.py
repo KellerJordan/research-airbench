@@ -38,6 +38,7 @@ hyp = {
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
+        'conv_precision': 3,
     },
 }
 
@@ -82,7 +83,8 @@ def cast_weight(w, bits, eps=1.7881e-07):
     return new_value.to(w.dtype)
         
 class CastedConv(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False, bits=None):
+    def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False,
+                 bits=hyp['net']['conv_precision']):
         super().__init__(in_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=bias)
         self.bits = bits
 
@@ -97,7 +99,7 @@ class CastedConv(nn.Conv2d):
         if self.bits is not None:
             # This uses the casted weights for both forward and backward pass,
             # while the updates go to the actual high precision weights
-            w_casted = reduce_precision(self.weight, self.bits)
+            w_casted = cast_weight(self.weight, self.bits)
             w = self.weight + (w_casted - self.weight.detach())
             return F.conv2d(x, w, padding=self.padding, bias=self.bias)
         else:
