@@ -11,6 +11,17 @@ Result: now with both non-filters at lr=0.01, got 93.70 in n=50.
 * Blows up with non-filters at lr=0.02.
 Result: now with both non-filters at lr=0.005, got 93.76 in n=50.
 Result: now projecting out the parallel direction, got 93.74 in n=50.
+
+Weight decay on the non-filters doesn't help
+* wd=0.0 -> 93.74(50)
+* wd=0.05 -> 93.71(10)
+* wd=0.1 -> 93.73(10)
+* wd=0.2 -> 93.61(10)
+* wd=0.5 -> 93.51(10)
+
+Now bs=1000 epochs=30
+* lr=0.03 -> 93.97(10)
+* lr=0.04 -> 94.16(10)
 """
 
 #############################################
@@ -240,7 +251,7 @@ def train(train_loader):
     other_params = [p for p in model.parameters() if len(p.shape) < 4 and p.requires_grad]
     optimizer1 = RenormSGD(filter_params, lr=0.03, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(other_params, lr=2.5 / hyp['opt']['batch_size'],
-                             momentum=hyp['opt']['momentum'], nesterov=True)
+                                 momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
@@ -283,5 +294,6 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
+                                       for _ in range(50)])))
 
