@@ -1,5 +1,7 @@
 """
 casted_airbench.py
+
+Accuracy: 93.95 in n=50 (with 3 bits, same as full-precision)
 """
 
 #############################################
