@@ -58,9 +58,17 @@ Again let w_bits=2 and unlimited range be the default.
 * a=2**-10 b=2**10 -> 93.55 (n=50)
 * a=2**-6 b=2**2 -> 93.55 (n=25)
 * a=2**-6 b=2**0 -> 93.61 (n=25)
-* a=2**-6 b=2**-1 -> 93.57 (n=25)
-* a=2**-5 b=2**-1 -> 93.57 (n=25)
+* a=2**-6 b=2**-1 -> 93.52 (n=50)
+* a=2**-5 b=2**-1 -> 93.51 (n=50)
 * a=2**-6 b=2**-2 -> 93.35 (n=25)
+* a=2**-3 b=2**-1 -> 93.29 (n=25)
+* w_bits=1 a=2**-3 b=2**-1 -> (n=50)
+
+Therefore overall we can reach the following conclusions.
+* We need 2 bits of precision for the weights and 4 bits for the activations.
+    - Losing 1 bit on either -> -0.1% accuracy.
+* We need 2 bits of range for the weights.
+    - Reducing to 1 bit of range -> -0.25%
 
 """
 
