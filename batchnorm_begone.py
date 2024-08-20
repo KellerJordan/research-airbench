@@ -10,6 +10,7 @@ Result: at lr=0.03, we got 93.69 in n=50.
 Result: now with both non-filters at lr=0.01, got 93.70 in n=50.
 * Blows up with non-filters at lr=0.02.
 Result: now with both non-filters at lr=0.005, got 93.76 in n=50.
+Result: now projecting out the parallel direction, got 93.74 in n=50.
 """
 
 #############################################
@@ -120,12 +121,19 @@ def renorm_sgd(params: List[Tensor],
             else:
                 d_p = buf
 
-        # filter-wise normalization
-        shape = [len(d_p)]+[1]*(len(d_p.shape)-1)
-        grad_scale = d_p.reshape(len(d_p), -1).norm(dim=1)
-        d_p_hat = d_p / grad_scale.view(*shape)
-        param.data.add_(d_p_hat, alpha=-lr)
-        param.data.div_(param.data.reshape(len(param), -1).norm(dim=1).view(*shape))
+        g = d_p
+        shape = [len(g)]+[1]*(len(g.shape)-1)
+        # project out the parallel component
+        dot = (g * param.data).reshape(len(g), -1).sum(1)
+        g = g - dot.view(*shape) * param.data
+        # normalize each filter's gradient
+        grad_scale = g.reshape(len(g), -1).norm(dim=1)
+        g = g / grad_scale.view(*shape)
+        # take a step
+        param.data.add_(g, alpha=-lr)
+        # re-normalize each filter
+        norm_scale = param.data.reshape(len(param), -1).norm(dim=1)
+        param.data.div_(norm_scale.view(*shape))
 
 #############################################
 #            Network Components             #
