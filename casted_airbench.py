@@ -159,7 +159,7 @@ def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
     frac = x * 2**-exp
     frac_newfp = frac.sign() * (1 + torch.round(2**bits * (frac.abs() - 1)) / 2**bits)
 
-    casted_x = frac_newfp.to(x.dtype) * 2**exp
+    casted_x = (frac_newfp * 2**exp).to(x.dtype)
     if a is not None:
         casted_x[x.abs() < a/2] = 0
         mask = (x.abs() >= a/2) & (x.abs() < a)
