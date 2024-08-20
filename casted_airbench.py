@@ -99,9 +99,9 @@ class CastedConv(nn.Conv2d):
             # while the updates go to the actual high precision weights
             w_casted = reduce_precision(self.weight, self.bits)
             w = self.weight + (w_casted - self.weight.detach())
-            return F.conv2d(x, w, padding=self.padding)
+            return F.conv2d(x, w, padding=self.padding, bias=self.bias)
         else:
-            return F.conv2d(x, self.weight, padding=self.padding)
+            return F.conv2d(x, self.weight, padding=self.padding, bias=self.bias)
 
 class ConvGroup(nn.Module):
     def __init__(self, channels_in, channels_out):
