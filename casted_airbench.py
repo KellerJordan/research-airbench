@@ -89,11 +89,12 @@ now with whitening layer in bits=2
 * bits=0 a=b=2**-3 -> 92.67 (10) [wd=0.01 -> 92.69 (25)] [triple compute, adjust lr -> 93.79 (25)]
 
 Now scaling ternary networks further. Ternary means bits=0 a=b=2**-2
+* ternary 1.5^3x width -> 94.63 (n=10) [lr=10, wd=0.012]
 * ternary 2.25x width -> 94.20 (n=10) [lr=10, wd=0.012]
 * ternary 1.5x width -> 93.66 (n=10) [lr=8, wd=0.012]
 * ternary 1x width -> 92.75 (n=25) [wd=0.010]
-* full-precision 2.25x width -> ~94.5
-* full-precision 1.5x width -> 94.13 (n=10) [lr=8, wd=0.012]
+* full-precision 2.25x width -> 94.59 (n=10) [lr=10 wd=0.012]
+* full-precision 1.5x width -> 94.27 (n=10) [lr=10, wd=0.012]
 * full-precision 1x width -> 93.56 (n=50)
 * full-precision 0.67x width -> 92.63 (n=25)
 Here's suboptimal parameters
@@ -121,13 +122,16 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
+w = 0
+b = 2
+
 hyp = {
     'opt': {
         'epochs': 10,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
         'momentum': 0.85,
-        'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
+        'weight_decay': 0.012,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
         'label_smoothing': 0.2,
     },
@@ -137,16 +141,16 @@ hyp = {
     },
     'net': {
         'widths': {
-            'block1': 64,
-            'block2': 256,
-            'block3': 256,
+            'block1': round(1.5**w * 64),
+            'block2': round(1.5**w * 256),
+            'block3': round(1.5**w * 256),
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
         'conv_precision': {
-            'bits': 2, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': 2**10,
-            'lower_bound': 2**-10,
+            'bits': b, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
+            'upper_bound': (2 - 2**-b) * 2**-1,
+            'lower_bound': 2**-4,
         }
     },
 }
@@ -179,18 +183,21 @@ class BatchNorm(nn.BatchNorm2d):
 # Note that this is a "simulation" of actual low-precision casting, i.e., we leave the weights in their
 # incoming hardware datatype; what changes is just that we round the values to the nearest valid
 # values at the lower precision.
-def cast_tensor(tensor, bits, a, b, eps=1.7881e-07):
+def cast_tensor(tensor, bits=None, a=None, b=None, eps=1.7881e-07):
     x = tensor.clone()
     if b is not None:
         x = x.sign() * x.abs().clamp(0, b)
     x[x == 0] = eps
 
-    log2 = torch.tensor(2.).log().cuda()
-    exp = (x.float().abs().log() / log2).floor()
-    frac = x * 2**-exp
-    frac_newfp = frac.sign() * (1 + torch.round(2**bits * (frac.abs() - 1)) / 2**bits)
+    if bits is not None:
+        log2 = torch.tensor(2.).log().cuda()
+        exp = (x.float().abs().log() / log2).floor()
+        frac = x * 2**-exp
+        frac_newfp = frac.sign() * (1 + torch.round(2**bits * (frac.abs() - 1)) / 2**bits)
+        casted_x = (frac_newfp * 2**exp).to(x.dtype)
+    else:
+        casted_x = x
 
-    casted_x = (frac_newfp * 2**exp).to(x.dtype)
     if a is not None:
         casted_x[x.abs() < a/2] = 0
         mask = (x.abs() >= a/2) & (x.abs() < a)
@@ -217,7 +224,7 @@ class CastedConv(nn.Conv2d):
         if len(self.weight) == 24:
             a = None
             b = None
-            bits = 4
+            bits = None
         else:
             s = self.weight.size(1)**0.5
             a = a / s
