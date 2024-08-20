@@ -123,7 +123,11 @@ from airbench import evaluate, CifarLoader
 torch.backends.cudnn.benchmark = True
 
 w = 0
-b = 2
+
+M = 2
+E = 4
+A = -4 # lower end of range: smallest representable value will be 2**A
+# largest value will be (2 - 2**-M) * 2**(A + E - 1)
 
 hyp = {
     'opt': {
@@ -148,9 +152,9 @@ hyp = {
         'scaling_factor': 1/9,
         'tta_level': 2,
         'conv_precision': {
-            'bits': b, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': (2 - 2**-b) * 2**-1,
-            'lower_bound': 2**-4,
+            'bits': M, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
+            'upper_bound': (2 - 2**-M) * 2**-(A+E-1),
+            'lower_bound': 2**-A,
         }
     },
 }
