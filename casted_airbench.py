@@ -16,7 +16,11 @@ Divide by w.abs().mean():
 (0, 4, -9) -> 93.45 (n=100)
 (0, 1, 0) -> 92.70 (n=100)
 (0, 1, 1) -> 92.78 (n=25) [tried n=100 but one of the runs NaNed]
-
+(0, 2, 0) -> 93.32 (n=25)
+(0, 2, -1) -> 93.24 (n=25)
+(1, 2, 0) -> 93.50 (n=25)
+(10, 5, -14) -> 93.58 (n=25)
+(2, 5, -14) -> 93.57 (n=25)
 
 """
 
@@ -38,11 +42,11 @@ w = 0 # log_2(width multipler)
 
 # See `cast_tensor`.
 #M, E, A = 10, 5, -14 # torch.half
-#M, E, A = 2, 5, -14 # torch.float8_e5m2
+M, E, A = 2, 5, -14 # torch.float8_e5m2
 #M, E, A = 0, 4, -9
 #M, E, A = 0, 2, -3
 #M, E, A = 0, 1, -2
-M, E, A  = 0, 1, 0
+#M, E, A  = 1, 2, 0
 
 hyp = {
     'opt': {
