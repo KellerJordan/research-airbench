@@ -182,14 +182,19 @@ def cast_tensor(x, M, E, A):
     """
     Casts every value in the tensor x to the nearest representable floating point number.
     Where the floating point representation has M mantissa bits, smallest exponent A, and E exponent bits.
+
     Therefore (only considering positives):
-    * The subnormal numbers will be {0, 2**(A-M), 2 * 2**(A-M), ..., (2**M-1) * (2**(A-M))}
-    * The smallest denormal number is 2**a
-    * The largest denormal number is 2**(a+2**E-2) * (2 - 2**-M)
-        (So the (largest / smallest) denormal number is roughly 2**(2**E-1))
+    * The subnormal numbers will be {0, 2**-M * 2**A), 2 * 2**-M * 2**A, ..., (2**M - 1) * 2**-M * 2**A}
+    * The smallest denormal number will be 2**a
+    * The largest denormal number will be 2**(a+2**E-2) * (2 - 2**-M)
+        (So the (largest / smallest) denormal number ratio is roughly 2**(2**E-1))
+
+    Examples:
     * torch.half is M, E, A = 10, 5, -14; modulo that the max exponent is replaced by NaN
     * torch.float8_e5m2 is M, E, A = 2, 5, -14; modulo that the max exponent is used for NaN
     * torch.float8_e4m3fn is M, E, A = 3, 4, -6; modulo that the max denormal is used for NaN
+    * int8 is M, E, A = 7, 0, 7
+    * ternary weights are M, E, A = 1, 0, 0
     """
 
     mantissa, exponent = torch.frexp(x.detach())
@@ -212,11 +217,16 @@ def cast_tensor(x, M, E, A):
     mantissa[mask] = 1
     exponent[mask] = exponent[mask] + 1
 
-    # Truncate top of range to 
-    B = A+2**E-2
-    mask = (exponent > B)
-    mantissa[mask] = 2 - 2**-M
-    exponent[mask] = B
+    # Truncate top of range
+    if E > 0:
+        B = A+2**E-2
+        mask = (exponent > B)
+        mantissa[mask] = 2 - 2**-M
+        exponent[mask] = B
+    else: # zero-bit exponent case: so we have only subnormal numbers (like an int8)
+        mask = (mantissa >= 1)
+        mantissa[mask] = 1 - 2**-M
+        exponent[mask] = A
 
     y = sign * 2**exponent * mantissa
     return y + (x - x.detach())
