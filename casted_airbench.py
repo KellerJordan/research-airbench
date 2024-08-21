@@ -129,7 +129,8 @@ w = 0
 #M, E, A = 10, 5, -14 # torch.half
 #M, E, A = 2, 5, -14 # torch.float8_e5m2
 #M, E, A = 2, 3, -5 # ???
-M, E, A = 0, 2, -4 # ternary weights
+#M, E, A = 0, 2, -3 # ???
+M, E, A = 0, 1, -2 # ternary weights
 
 hyp = {
     'opt': {
@@ -201,20 +202,21 @@ def cast_tensor(x, M, E, A):
     In every case, the number of represented positive numbers is 2**(M+E).
     """
 
-    mantissa, exponent = torch.frexp(x.detach())
+    xp = x.detach().abs()
+    mantissa, exponent = torch.frexp(xp)
     mantissa *= 2 # bring mantissa into the range [1, 2) instead of [0.5, 1)
     exponent -= 1
     sign = mantissa.sign()
     mantissa = mantissa.abs()
     exponent = exponent.to(x.dtype)
-    assert (sign * 2**exponent * mantissa == x).all(), x[sign * 2**exponent * mantissa != x]
+    assert (2**exponent * mantissa == xp).all(), x[2**exponent * mantissa != xp]
 
     # Round mantissa to given precision
     mantissa = (1 + 2**-M * ((mantissa - 1) * 2**M).round())
 
     # Handle subnormals separately
     mask = (exponent < A)
-    mantissa[mask] = (x.detach()[mask] * 2**(M-A)).round() / 2**M
+    mantissa[mask] = (xp[mask] * 2**(M-A)).round() / 2**M
     exponent[mask] = A
 
     mask = (mantissa == 2)
@@ -232,7 +234,7 @@ def cast_tensor(x, M, E, A):
         mantissa[mask] = 1 - 2**-M
         exponent[mask] = A
 
-    y = sign * 2**exponent * mantissa
+    y = x.sign() * 2**exponent * mantissa
     return y + (x - x.detach())
 
 class CastedConv(nn.Conv2d):
