@@ -1,111 +1,8 @@
 """
 casted_airbench.py
 
-Accuracy: 93.95 in n=50
-
-At various precisions:
-* bits=3 -> 93.95 (n=50)
-* bits=2 -> 93.95 (n=100)
-* bits=1 -> 93.86 (n=50)
-* bits=0 -> 93.67 (n=50)
-
-What if we leave the whitening convolution in bits=2?
-* a=2**-8 bits=0 -> 93.76 (n=30)
-* bits=0 -> 93.73 (n=50)
-What if we leave all the convolutions with <= 64 filters in bits=2?
-* a=2**-8 bits=0 -> 93.80 (n=20)
-
-Now always with bits=2, ablating over the bounds
-* (lg a, lg b) = (-inf, 2) -> 93.90 (n=50)
-* (lg a, lg b) = (-inf, 3) -> 93.93 (n=50)
-* (lg a, lg b) = (-8, 3) -> 93.91 (n=50)
-* (lg a, lg b) = (-7, 3) -> 93.78 (n=50)
-* (lg a, lg b) = (-6, 3) -> 93.29 (n=50)
-
-What if we do stochastic rounding of the weights every batch, instead of deterministic?
-* It's terrible. Not sure if it would be better if we did it at the example level.
-
-What if we leave the weights 2-bit, and also cast the inputs?
-* bits=5 -> 93.89 (n=50)
-* bits=4 -> 93.89 (n=50)
-* bits=3 -> 93.82 (n=50)
-* bits=2 -> 93.63 (n=50)
-
-What if we don't upper-bound the first weight (which is the whitening layer)?
-* (lg a, lg b) = (-inf, 1) -> 93.90 (n=20)
-* (lg a, lg b) = (-inf, 0) -> 93.98 (n=20)
-* (lg a, lg b) = (-inf, -1) -> 93.95 (n=50)
-* (lg a, lg b) = (-inf, -2) -> 93.73 (n=10)
-* (lg a, lg b) = (-inf, -3) -> 93.58 (n=10)
-* (lg a, lg b) = (-10, 0) -> 93.94 (n=50)
-
-Final settings. Assume w_bits=2 a=2**-10 b=2**0 unless otherwise specified.
-* [default -> 93.94 (n=50)]
-* x_bits=5 a=2**-8 -> 93.84 (n=50)
-* w_bits=1 x_bits=5 -> 93.83 (n=50)
-* a=2**-8 -> 93.90 (n=50)
-* x_bits=8 -> 93.95 (n=50)
-* x_bits=5 -> 93.89 (n=50)
-* x_bits=4 -> 93.89 (n=50)
-* x_bits=3 -> 93.80 (n=50)
-
-Now let's remove the dirac initialization so that we can shrink the range.
-Parametrize a and b so that they are multiplied by 1/d**0.5 where d is the number
-of incoming channels (so the average PT init would be (1/(3*3)*3)**0.5 times this).
-Again let w_bits=2 and unlimited range be the default.
-* default -> 93.56 (n=50)
-* a=2**-4 b=2**4 -> 93.49 (n=50)
-* a=2**-10 b=2**10 -> 93.55 (n=50)
-* a=2**-6 b=2**2 -> 93.55 (n=25)
-* a=2**-6 b=2**0 -> 93.61 (n=25)
-* a=2**-6 b=2**-1 -> 93.52 (n=50)
-* a=2**-5 b=2**-1 -> 93.51 (n=50)
-* a=2**-6 b=2**-2 -> 93.35 (n=25)
-* a=2**-3 b=2**-1 -> 93.29 (n=25)
-
-Therefore overall we can reach the following conclusions.
-* We need 2 bits of precision for the weights and 4 bits for the activations.
-    - Losing 1 bit on either -> -0.1% accuracy.
-* We need 2 bits of range for the weights.
-    - Reducing to 1 bit of range -> -0.25%
-
-Now with new tech for the bottom of the range. If you're below a then round to either 0 or a.
-Previously it was just rounding down to 0 always.
-* default -> 93.94 (n=50)
-* a=2**-6 -> 93.56 (n=25) [this improves significantly over the prior result of 93.29]
-
-Now also with removing dirac and relative-to-sqrt tech etc.
-* a=2**-5 b=2**-1 -> 93.55 (n=25)
-* a=2**-3 b=2**-1 -> 93.40 (n=25) [again improving over prior result]
-oops the below are mistaken because I didn't keep the whitening layer in bits=2
-* bits=1 a=2**-5 b=2**-1 -> 93.49 (n=25)
-* bits=1 a=2**-3 b=2**-1 -> 93.36 (n=25)
-* bits=0 a=2**-5 b=2**-1 -> 93.26 (n=25)
-* bits=0 a=2**-3 b=2**-1 -> 93.22 (n=25)
-* bits=0 a=2**-2 b=2**-1 -> 92.81 (n=25)
-* bits=0 a=2**-3 b=2**-2 -> 93.06 (n=25)
-now with whitening layer in bits=2
-* bits=0 a=b=2**-2 -> 92.66 (10) [wd=0.01 -> 92.75 (25)] [~triple compute, adjust lr -> 93.75 (25)] [2.25x compute, adjust lr -> 93.59]
-* bits=0 a=b=2**-3 -> 92.67 (10) [wd=0.01 -> 92.69 (25)] [triple compute, adjust lr -> 93.79 (25)]
-
-Now scaling ternary networks further. Ternary means bits=0 a=b=2**-2
-* ternary 1.5^3x width -> 94.63 (n=10) [lr=10, wd=0.012]
-* ternary 2.25x width -> 94.20 (n=10) [lr=10, wd=0.012]
-* ternary 1.5x width -> 93.66 (n=10) [lr=8, wd=0.012]
-* ternary 1x width -> 92.75 (n=25) [wd=0.010]
-* full-precision 2.25x width -> 94.59 (n=10) [lr=10 wd=0.012]
-* full-precision 1.5x width -> 94.27 (n=10) [lr=10, wd=0.012]
-* full-precision 1x width -> 93.56 (n=50)
-* full-precision 0.67x width -> 92.63 (n=25)
-Here's suboptimal parameters
-* ternary 2.25x width -> 94.07 (n=10) [lr=6, wd=0.009]
-* ternary 2.25x width -> 94.03 (n=10) [lr=10, wd=0.015]
-* ternary 1.5x width -> 93.62 (n=10) [lr=10, wd=0.015]
-* ternary 1.5x width -> 93.64 (n=10) [lr=10, wd=0.012]
-
-These last networks were ternary. They apparently perform as well as ~2.25x-larger full precision networks.
-This the same result that we can see in the training loss reported by the 1.58-bit paper.
-https://github.com/microsoft/unilm/blob/master/bitnet/The-Era-of-1-bit-LLMs__Training_Tips_Code_FAQ.pdf
+Accuracy: 93.95 in (n=100) with dirac initialization
+Without dirac: 93.60 (n=100)
 """
 
 #############################################
@@ -393,5 +290,5 @@ if __name__ == '__main__':
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
     print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
-                                       for _ in range(10)])))
+                                       for _ in range(100)])))
 
