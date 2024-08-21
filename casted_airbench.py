@@ -128,7 +128,7 @@ w = 0
 # See `cast_tensor`.
 M = 10
 E = 5
-A = -10
+A = -14
 
 hyp = {
     'opt': {
@@ -242,16 +242,17 @@ class CastedConv(nn.Conv2d):
         super().reset_parameters()
         if self.bias is not None:
             self.bias.data.zero_()
-        w = self.weight.data
-        torch.nn.init.dirac_(w[:w.size(1)])
+        #w = self.weight.data
+        #torch.nn.init.dirac_(w[:w.size(1)])
         
     def forward(self, x):
         if len(self.weight) == 24:
             return F.conv2d(x, self.weight, padding=self.padding, bias=self.bias)
         # Uses the casted weights for both forward and backward pass,
         # while the updates go to the high precision weights. This can be thought of
-        # as a "straight-through estiator".
-        w = cast_tensor(self.weight, M, E, A)
+        # as a "straight-through estimator".
+        s = self.weight.size(1)**0.5
+        w = (1/s) * cast_tensor(s * self.weight, M, E, A)
         return F.conv2d(x, w, padding=self.padding, bias=self.bias)
 
 class ConvGroup(nn.Module):
