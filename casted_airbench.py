@@ -126,9 +126,10 @@ torch.backends.cudnn.benchmark = True
 w = 0
 
 # See `cast_tensor`.
-M = 10
-E = 5
-A = -14
+#M, E, A = 10, 5, -14 # torch.half
+#M, E, A = 2, 5, -14 # torch.float8_e5m2
+#M, E, A = 2, 3, -5 # ???
+M, E, A = 0, 2, -4 # ternary weights
 
 hyp = {
     'opt': {
@@ -194,7 +195,7 @@ def cast_tensor(x, M, E, A):
     * torch.float8_e5m2 is M, E, A = 2, 5, -14 (also modulo that the real format uses max exponent for NaN)
     * torch.float8_e4m3fn is M, E, A = 3, 4, -6 (modulo that the real format uses max denormal for NaN)
     * int8 is M, E, A = 7, 0, 7; this represents ±{0, 1, ..., 127}. (modulo that real int8 also has -128)
-    * ternary weights are M, E, A = 1, 0, 0, this represents {-1, 0, +1}.
+    * ternary weights are M, E, A = 0, 1, 0, this represents {-1, 0, +1}.
     * you could even have M, E, A = 0, 3, -2; this represents ±{0, 0.25, 0.5, 1, 2, 4, 8, 16}.
 
     In every case, the number of represented positive numbers is 2**(M+E).
@@ -206,7 +207,7 @@ def cast_tensor(x, M, E, A):
     sign = mantissa.sign()
     mantissa = mantissa.abs()
     exponent = exponent.to(x.dtype)
-    assert (sign * 2**exponent * mantissa == x).all()
+    assert (sign * 2**exponent * mantissa == x).all(), x[sign * 2**exponent * mantissa != x]
 
     # Round mantissa to given precision
     mantissa = (1 + 2**-M * ((mantissa - 1) * 2**M).round())
@@ -388,5 +389,5 @@ if __name__ == '__main__':
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
     print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
-                                       for _ in range(50)])))
+                                       for _ in range(10)])))
 
