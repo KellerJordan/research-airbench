@@ -180,21 +180,24 @@ class BatchNorm(nn.BatchNorm2d):
 
 def cast_tensor(x, M, E, A):
     """
-    Casts every value in the tensor x to the nearest representable floating point number.
+    Rounds every value in the tensor x to the nearest representable floating point number.
     Where the floating point representation has M mantissa bits, smallest exponent A, and E exponent bits.
 
-    Therefore (only considering positives):
+    Therefore (only considering positive numbers):
     * The subnormal numbers will be {0, 2**-M * 2**A), 2 * 2**-M * 2**A, ..., (2**M - 1) * 2**-M * 2**A}
     * The smallest denormal number will be 2**a
     * The largest denormal number will be 2**(a+2**E-2) * (2 - 2**-M)
         (So the (largest / smallest) denormal number ratio is roughly 2**(2**E-1))
 
     Examples:
-    * torch.half is M, E, A = 10, 5, -14; modulo that the max exponent is replaced by NaN
-    * torch.float8_e5m2 is M, E, A = 2, 5, -14; modulo that the max exponent is used for NaN
-    * torch.float8_e4m3fn is M, E, A = 3, 4, -6; modulo that the max denormal is used for NaN
-    * int8 is M, E, A = 7, 0, 7
-    * ternary weights are M, E, A = 1, 0, 0
+    * torch.half is M, E, A = 10, 5, -14; (modulo that the real format uses max exponent for NaN)
+    * torch.float8_e5m2 is M, E, A = 2, 5, -14 (also modulo that the real format uses max exponent for NaN)
+    * torch.float8_e4m3fn is M, E, A = 3, 4, -6 (modulo that the real format uses max denormal for NaN)
+    * int8 is M, E, A = 7, 0, 7; this represents ±{0, 1, ..., 127}. (modulo that real int8 also has -128)
+    * ternary weights are M, E, A = 1, 0, 0, this represents {-1, 0, +1}.
+    * you could even have M, E, A = 0, 3, -2; this represents ±{0, 0.25, 0.5, 1, 2, 4, 8, 16}.
+
+    In every case, the number of represented positive numbers is 2**(M+E).
     """
 
     mantissa, exponent = torch.frexp(x.detach())
