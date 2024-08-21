@@ -1,8 +1,14 @@
 """
 casted_airbench.py
 
-Accuracy: 93.95 in (n=100) with dirac initialization
+Accuracy.
+With dirac initialization: 93.95 (n=100)
 Without dirac: 93.60 (n=100)
+
+Casting parameters (M, E, A):
+(0, 2, -3) ->  [weights in ±{0, 1/8, 1/4, 1/2}]
+(0, 1, -2) ->  [ternary weights in ±{0, 1/4}]
+
 """
 
 #############################################
@@ -24,12 +30,9 @@ w = 0 # log_2(width multipler)
 # See `cast_tensor`.
 #M, E, A = 10, 5, -14 # torch.half
 #M, E, A = 2, 5, -14 # torch.float8_e5m2
-#M, E, A = 2, 3, -5 #
-#M, E, A = 1, 2, -3 #  93.45 (10)
-#M, E, A = 0, 3, -7 # 93.43 (10)
-#M, E, A = 0, 5, -6 # 93.45 (10)
-M, E, A = 0, 2, -3 # ~93.35 (10)
-#M, E, A = 0, 1, -2 # ternary weights
+#M, E, A = 0, 4, -9
+#M, E, A = 0, 2, -3
+M, E, A = 0, 1, -2
 
 hyp = {
     'opt': {
@@ -86,8 +89,8 @@ def cast_tensor(x, M, E, A):
 
     Therefore (only considering positive numbers):
     * The subnormal numbers will be {0, 2**-M * 2**A), 2 * 2**-M * 2**A, ..., (2**M - 1) * 2**-M * 2**A}
-    * The smallest denormal number will be 2**a
-    * The largest denormal number will be 2**(a+2**E-2) * (2 - 2**-M)
+    * The smallest denormal number will be 2**A
+    * The largest denormal number will be 2**(A+2**E-2) * (2 - 2**-M)
         (So the (largest / smallest) denormal number ratio is roughly 2**(2**E-1))
 
     Examples:
