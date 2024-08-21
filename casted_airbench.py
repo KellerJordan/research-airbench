@@ -122,12 +122,13 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
+# The log_2(width multipler).
 w = 0
 
-M = 2
-E = 4
-A = -4 # lower end of range: smallest representable value will be 2**A
-# largest value will be (2 - 2**-M) * 2**(A + E - 1)
+# See `cast_tensor`.
+M = 10
+E = 5
+A = -10
 
 hyp = {
     'opt': {
@@ -151,11 +152,6 @@ hyp = {
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
-        'conv_precision': {
-            'bits': M, # bits per binary level: bits=3 means we can represent 8 values in the range [1, 2), 8 values in [2, 4) etc
-            'upper_bound': (2 - 2**-M) * 2**-(A+E-1),
-            'lower_bound': 2**-A,
-        }
     },
 }
 
@@ -182,33 +178,48 @@ class BatchNorm(nn.BatchNorm2d):
         self.bias.requires_grad = bias
         # Note that PyTorch already initializes the weights to one and bias to zero
 
-# Reduces the precision of x to the given number of bits.
-# The number of bits for the exponent is unchanged.
-# Note that this is a "simulation" of actual low-precision casting, i.e., we leave the weights in their
-# incoming hardware datatype; what changes is just that we round the values to the nearest valid
-# values at the lower precision.
-def cast_tensor(tensor, bits=None, a=None, b=None, eps=1.7881e-07):
-    x = tensor.clone()
-    if b is not None:
-        x = x.sign() * x.abs().clamp(0, b)
-    x[x == 0] = eps
+def cast_tensor(x, M, E, A):
+    """
+    Casts every value in the tensor x to the nearest representable floating point number.
+    Where the floating point representation has M mantissa bits, smallest exponent A, and E exponent bits.
+    Therefore (only considering positives):
+    * The subnormal numbers will be {0, 2**(A-M), 2 * 2**(A-M), ..., (2**M-1) * (2**(A-M))}
+    * The smallest denormal number is 2**a
+    * The largest denormal number is 2**(a+2**E-2) * (2 - 2**-M)
+        (So the (largest / smallest) denormal number is roughly 2**(2**E-1))
+    * torch.half is M, E, A = 10, 5, -14; modulo that the max exponent is replaced by NaN
+    * torch.float8_e5m2 is M, E, A = 2, 5, -14; modulo that the max exponent is used for NaN
+    * torch.float8_e4m3fn is M, E, A = 3, 4, -6; modulo that the max denormal is used for NaN
+    """
 
-    if bits is not None:
-        log2 = torch.tensor(2.).log().cuda()
-        exp = (x.float().abs().log() / log2).floor()
-        frac = x * 2**-exp
-        frac_newfp = frac.sign() * (1 + torch.round(2**bits * (frac.abs() - 1)) / 2**bits)
-        casted_x = (frac_newfp * 2**exp).to(x.dtype)
-    else:
-        casted_x = x
+    mantissa, exponent = torch.frexp(x.detach())
+    mantissa *= 2 # bring mantissa into the range [1, 2) instead of [0.5, 1)
+    exponent -= 1
+    sign = mantissa.sign()
+    mantissa = mantissa.abs()
+    exponent = exponent.to(x.dtype)
+    assert (sign * 2**exponent * mantissa == x).all()
 
-    if a is not None:
-        casted_x[x.abs() < a/2] = 0
-        mask = (x.abs() >= a/2) & (x.abs() < a)
-        casted_x[mask] = a * x.sign()[mask]
+    # Round mantissa to given precision
+    mantissa = (1 + 2**-M * ((mantissa - 1) * 2**M).round())
 
-    # let the gradients flow through the original tensor
-    return casted_x.detach() + (tensor - tensor.detach())
+    # Handle subnormals separately
+    mask = (exponent < A)
+    mantissa[mask] = (x.detach()[mask] * 2**(M-A)).round() / 2**M
+    exponent[mask] = A
+
+    mask = (mantissa == 2)
+    mantissa[mask] = 1
+    exponent[mask] = exponent[mask] + 1
+
+    # Truncate top of range to 
+    B = A+2**E-2
+    mask = (exponent > B)
+    mantissa[mask] = 2 - 2**-M
+    exponent[mask] = B
+
+    y = sign * 2**exponent * mantissa
+    return y + (x - x.detach())
 
 class CastedConv(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False):
@@ -222,24 +233,13 @@ class CastedConv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
         
     def forward(self, x):
-        bits = hyp['net']['conv_precision']['bits']
-        a = hyp['net']['conv_precision']['lower_bound']
-        b = hyp['net']['conv_precision']['upper_bound']
         if len(self.weight) == 24:
-            a = None
-            b = None
-            bits = None
-        else:
-            s = self.weight.size(1)**0.5
-            a = a / s
-            b = b / s
-        if bits is not None:
-            # This uses the casted weights for both forward and backward pass,
-            # while the updates go to the actual high precision weights
-            w = cast_tensor(self.weight, bits, a, b)
-            return F.conv2d(x, w, padding=self.padding, bias=self.bias)
-        else:
             return F.conv2d(x, self.weight, padding=self.padding, bias=self.bias)
+        # Uses the casted weights for both forward and backward pass,
+        # while the updates go to the high precision weights. This can be thought of
+        # as a "straight-through estiator".
+        w = cast_tensor(self.weight, M, E, A)
+        return F.conv2d(x, w, padding=self.padding, bias=self.bias)
 
 class ConvGroup(nn.Module):
     def __init__(self, channels_in, channels_out):
