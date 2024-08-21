@@ -8,14 +8,14 @@ Without dirac: 93.60 (n=100)
 Casting parameters (M, E, A):
 
 Divide by sqrt(in_channels):
-(0, 4, -9) -> ?? (n=100)
+(0, 4, -9) -> 93.42 (n=100)
 (0, 2, -3) -> 93.32 (n=100) [weights in ±{0, 1/8, 1/4, 1/2}]
 (0, 1, -2) -> 92.73 (n=100) [ternary weights in ±{0, 1/4}]
 
 Divide by w.abs().mean():
 (0, 4, -9) -> 93.45 (n=100)
 (0, 1, 0) -> 92.70 (n=100)
-(0, 1, 1) -> 92.84 (n=10) [tried n=100 but one of the runs NaNed]
+(0, 1, 1) -> 92.78 (n=25) [tried n=100 but one of the runs NaNed]
 
 
 """
@@ -39,10 +39,10 @@ w = 0 # log_2(width multipler)
 # See `cast_tensor`.
 #M, E, A = 10, 5, -14 # torch.half
 #M, E, A = 2, 5, -14 # torch.float8_e5m2
-M, E, A = 0, 4, -9
+#M, E, A = 0, 4, -9
 #M, E, A = 0, 2, -3
 #M, E, A = 0, 1, -2
-#M, E, A  = 0, 1, 1
+M, E, A  = 0, 1, 0
 
 hyp = {
     'opt': {
@@ -167,8 +167,8 @@ class CastedConv(nn.Conv2d):
         # while the updates go to the high precision weights. This can be thought of
         # as a "straight-through estimator".
 
-        s = self.weight.size(1)**0.5
-        #s = 1 / self.weight.data.abs().mean()
+        #s = self.weight.size(1)**0.5
+        s = 1 / self.weight.data.abs().mean()
 
         w = (1/s) * cast_tensor(s * self.weight, M, E, A)
         return F.conv2d(x, w, padding=self.padding, bias=self.bias)
@@ -306,5 +306,5 @@ if __name__ == '__main__':
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
     print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
-                                       for _ in range(100)])))
+                                       for _ in range(25)])))
 
