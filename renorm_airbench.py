@@ -20,16 +20,26 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-w = 1.0
+w = 2.0
 
-# parametriation experiments...
-# scaling_factor: if kept constant at 1/9, then going to width=0.5 yields 92.19(n=25); if scaled by w**0.5 then yields 92.32(n=25)
+"""
+Parametrization experiments...
+
+* scaling_factor: if kept constant at 1/9, then going to width=0.5 yields 92.19(n=25); if scaled by w**0.5 then yields 92.32(n=25)
+
+* width=1 scaling_factor=1/6.4 -> 94.04(n=25)
+
+* width=2.0 (scaling_factor=1/12.7)-> 94.79(n=25)
+* width=2.0 scaling_factor=1/9 ->
+
+"""
 
 hyp = {
     'opt': {
         'epochs': 10,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
+        'filter_lr': 0.07,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
         'momentum': 0.85,
         'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
@@ -261,7 +271,7 @@ def train(train_loader):
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
     other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
-    optimizer1 = RenormSGD(filter_params, lr=0.07, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer1 = RenormSGD(filter_params, lr=hyp['opt']['filter_lr'], momentum=hyp['opt']['momentum'], nesterov=True)
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
