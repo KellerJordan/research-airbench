@@ -22,6 +22,9 @@ torch.backends.cudnn.benchmark = True
 
 w = 1.0
 
+# parametriation experiments...
+# scaling_factor: if kept constant at 1/9, then going to width=0.5 yields 92.19(n=25); if scaled by w**0.5 then yields 92.32(n=25)
+
 hyp = {
     'opt': {
         'epochs': 10,
@@ -42,7 +45,7 @@ hyp = {
             'block2': int(256*w),
             'block3': int(256*w),
         },
-        'scaling_factor': 1/9,
+        'scaling_factor': 1/9 / w**0.5, # muP-like scaling, for SGD
         'tta_level': 2,
     },
 }
@@ -301,5 +304,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(25)])))
 
