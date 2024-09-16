@@ -20,6 +20,8 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
+w = 1.0
+
 hyp = {
     'opt': {
         'epochs': 10,
@@ -36,9 +38,9 @@ hyp = {
     },
     'net': {
         'widths': {
-            'block1': 64,
-            'block2': 256,
-            'block3': 256,
+            'block1': int(64*w),
+            'block2': int(256*w),
+            'block3': int(256*w),
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
@@ -259,8 +261,7 @@ def train(train_loader):
     optimizer1 = RenormSGD(filter_params, lr=0.07, momentum=hyp['opt']['momentum'], nesterov=True)
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    optimizer2 = torch.optim.SGD(param_configs, lr=2.5 / hyp['opt']['batch_size'],
-                                 momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
