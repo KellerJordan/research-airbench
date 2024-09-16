@@ -20,17 +20,18 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-w = 2.0
+w = 1.0
 
 """
 Parametrization experiments...
 
-* scaling_factor: if kept constant at 1/9, then going to width=0.5 yields 92.19(n=25); if scaled by w**0.5 then yields 92.32(n=25)
+* width=0.5 scaling_factor=1/9 -> 92.19(n=25)
+* width=0.5 scaling_factor=1/6.4 -> 92.32(n=25)
 
 * width=1 scaling_factor=1/6.4 -> 94.04(n=25)
 
 * width=2.0 (scaling_factor=1/12.7)-> 94.79(n=25)
-* width=2.0 scaling_factor=1/9 ->
+* width=2.0 scaling_factor=1/9 -> 94.86(n=25)
 
 """
 
@@ -55,7 +56,7 @@ hyp = {
             'block2': int(256*w),
             'block3': int(256*w),
         },
-        'scaling_factor': 1/9 / w**0.5, # muP-like scaling, for SGD
+        'scaling_factor': 1/9,
         'tta_level': 2,
     },
 }
