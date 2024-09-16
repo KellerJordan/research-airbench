@@ -1,19 +1,9 @@
 """
 renorm_airbench.py
 
-Variant of airbench94 which removes the following:
-* Lookahead optimization
-* Progressive freezing
+Variant of clean_airbench which uses the renormalized optimizer.
 
-And increases the training duration slightly via the following:
-* Epochs 9.9 -> 10.0
-* Batch size 1024 -> 1000
-
-+imports the dataloader from airbench package.
-
-And adds renormalized SGD as the optimizer.
-
-Attains 94.04 mean accuracy.
+Attains ? mean accuracy (n=50).
 """
 
 #############################################
@@ -54,6 +44,89 @@ hyp = {
         'tta_level': 2,
     },
 }
+
+#############################################
+#          Renormalized Optimizer           #
+#############################################
+
+import torch
+from torch import Tensor
+from torch.optim.optimizer import Optimizer
+from typing import List, Optional
+
+class RenormSGD(Optimizer):
+    def __init__(self, params, lr=1e-3, momentum=0, dampening=0, nesterov=False):
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if momentum < 0.0:
+            raise ValueError(f"Invalid momentum value: {momentum}")
+        if nesterov and (momentum <= 0 or dampening != 0):
+            raise ValueError("Nesterov momentum requires a momentum and zero dampening")
+        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
+                        nesterov=nesterov)
+        super().__init__(params, defaults)
+
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            params_with_grad = [p for p in group['params'] if p.grad is not None]
+            d_p_list = [p.grad for p in params_with_grad]
+            momentum_buffer_list = [self.state[p].get('momentum_buffer') for p in params_with_grad]
+
+            renorm_sgd(params_with_grad,
+                       d_p_list,
+                       momentum_buffer_list,
+                       momentum=group['momentum'],
+                       lr=group['lr'],
+                       dampening=group['dampening'],
+                       nesterov=group['nesterov'])
+
+            # update momentum_buffers in state
+            for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
+                self.state[p]['momentum_buffer'] = momentum_buffer
+
+        return loss
+
+def renorm_sgd(params: List[Tensor],
+               d_p_list: List[Tensor],
+               momentum_buffer_list: List[Optional[Tensor]],
+               *,
+               momentum: float,
+               lr: float,
+               dampening: float,
+               nesterov: bool):
+
+    for i, param in enumerate(params):
+        d_p = d_p_list[i]
+
+        if momentum != 0:
+            buf = momentum_buffer_list[i]
+
+            if buf is None:
+                buf = torch.clone(d_p).detach()
+                momentum_buffer_list[i] = buf
+            else:
+                buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
+
+            if nesterov:
+                d_p = d_p.add(buf, alpha=momentum)
+            else:
+                d_p = buf
+
+        g = d_p
+        shape = [len(g)]+[1]*(len(g.shape)-1)
+        # normalize each filter's gradient
+        grad_scale = g.reshape(len(g), -1).norm(dim=1)
+        g = g / grad_scale.view(*shape)
+        # take a step
+        param.data.add_(g, alpha=-lr)
+        # re-normalize each filter
+        norm_scale = param.data.reshape(len(param), -1).norm(dim=1)
+        param.data.div_(norm_scale.view(*shape))
 
 #############################################
 #            Network Components             #
@@ -180,14 +253,14 @@ def train(train_loader):
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
     total_train_steps = epochs * len(train_loader)
 
-    params = [(k, p) for k, p in model.named_parameters() if p.requires_grad]
-    norm_params = [p for k, p in params if 'norm' in k]
-    other_params = [p for k, p in params if ('norm' not in k) and len(p.shape) != 4]
-    filter_params = [p for k, p in params if ('norm' not in k) and len(p.shape) == 4]
-    optimizer1 = torch.optim.SGD([dict(params=norm_params, lr=lr_biases, weight_decay=wd/lr_biases),
-                                  dict(params=other_params, lr=lr, weight_decay=wd/lr)], momentum=momentum, nesterov=True)
-    from renorm_sgd import RenormSGD
-    optimizer2 = RenormSGD([dict(params=filter_params, lr=0.07)], momentum=momentum, nesterov=True)
+    filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
+    norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
+    other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
+    optimizer1 = RenormSGD(filter_params, lr=0.07, momentum=hyp['opt']['momentum'], nesterov=True)
+    param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
+                     dict(params=other_params, lr=lr, weight_decay=wd/lr)]
+    optimizer2 = torch.optim.SGD(param_configs, lr=2.5 / hyp['opt']['batch_size'],
+                                 momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
@@ -209,12 +282,10 @@ def train(train_loader):
 
             outputs = model(inputs)
             loss = loss_fn(outputs, labels).sum()
+            model.zero_grad()
             loss.backward()
-
             optimizer1.step()
             optimizer2.step()
-            optimizer1.zero_grad(set_to_none=True)
-            optimizer2.zero_grad(set_to_none=True)
             scheduler1.step()
             scheduler2.step()
 
