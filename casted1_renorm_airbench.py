@@ -22,14 +22,14 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-w = 2.0
+w = 1.0
 
 """
 Parametrization/scaling experiments...
 
-width=2 ->  
-width=2 flr=0.05 ->  
-width=2 flr=0.09 ->  
+width=2 -> 94.62(n=25)
+width=2 flr=0.05 -> 94.53(n=25)
+width=2 flr=0.09 -> 94.51(n=25)
 
 """
 
@@ -38,7 +38,7 @@ hyp = {
         'epochs': 10,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
-        'filter_lr': 0.05,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
+        'filter_lr': 0.07,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
         'momentum': 0.85,
         'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
