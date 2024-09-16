@@ -127,9 +127,6 @@ def renorm_sgd(params: List[Tensor],
 
         g = d_p
         shape = [len(g)]+[1]*(len(g.shape)-1)
-        # project out the parallel component
-        dot = (g * param.data).reshape(len(g), -1).sum(1)
-        g = g - dot.view(*shape) * param.data
         # normalize each filter's gradient
         grad_scale = g.reshape(len(g), -1).norm(dim=1)
         g = g / grad_scale.view(*shape)
