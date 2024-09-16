@@ -3,7 +3,7 @@ renorm_airbench.py
 
 Variant of clean_airbench which uses the renormalized optimizer.
 
-Attains ? mean accuracy (n=50).
+Attains 94.07 mean accuracy (n=50).
 """
 
 #############################################
