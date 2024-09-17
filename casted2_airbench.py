@@ -21,8 +21,6 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-w = 1.0
-
 """
 Parametrization/scaling experiments...
 
@@ -34,14 +32,6 @@ width=1 e=20 -> 94.49(n=25)
 width=1 e=20 flr=0.05 -> 94.37(n=25)
 width=1 e=20 flr=0.09 -> 94.48(n=25)
 """
-
-# See `cast_tensor`.
-#M, E, A = 10, 5, -14 # torch.half
-#M, E, A = 2, 5, -14 # torch.float8_e5m2
-#M, E, A = 0, 4, -9
-#M, E, A = 0, 2, -3
-#M, E, A = 0, 1, -2
-#M, E, A  = 1, 2, 0
 
 hyp = {
     'opt': {
@@ -59,10 +49,11 @@ hyp = {
         'translate': 2,
     },
     'net': {
+        'width_factor': 1,
         'widths': {
-            'block1': int(64*w),
-            'block2': int(256*w),
-            'block3': int(256*w),
+            'block1': 64,
+            'block2': 256,
+            'block3': 256,
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
@@ -70,10 +61,16 @@ hyp = {
         # M=(number of mantissa bits), E=(number of exponent bits), A=(log_2 of smallest normal number)
         # For example, (7, 0, 7) is int8 (everything subnormal), and (2, 5, -14) is torch.float8_e5m2.
         # And (0, 1, 0) is ternary. Among positives, it represents 1 as a normal number, and 0 as the subnormal number.
-        #'MEA': (10, 5, -14), # torch.half
-        #'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25)
-        'MEA': (0, 1, 0), 
+        # Note that there's always a sign bit, so ternary is {-1, 0, 1}.
+        # See `cast_tensor` for more documentation.
 
+        #'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
+        #'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25)
+        #'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25)
+        #'MEA': (0, 2, -3), # {0, 1/8, 1/4, 1/2} -> 93.05(n=25)
+        #'MEA': (0, 2, -1), # {0, 1/2, 1, 2} -> 93.54(n=25)
+        #'MEA': (0, 2, -2), # {0, 1/4, 1/2, 1} -> seems bad
+        'MEA': (1, 1, 0), # {0, 1/2, 1, 3/2} -> 
     },
 }
 
@@ -323,15 +320,19 @@ def make_net():
     widths = hyp['net']['widths']
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
+    w = hyp['net']['width_factor']
+    w1 = int(w*widths['block1'])
+    w2 = int(w*widths['block2'])
+    w3 = int(w*widths['block3'])
     net = nn.Sequential(
         Conv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
         nn.GELU(),
-        ConvGroup(whiten_width,     widths['block1']),
-        ConvGroup(widths['block1'], widths['block2']),
-        ConvGroup(widths['block2'], widths['block3']),
+        ConvGroup(whiten_width, w1),
+        ConvGroup(w1, w2),
+        ConvGroup(w2, w3),
         nn.MaxPool2d(3),
         Flatten(),
-        nn.Linear(widths['block3'], 10, bias=False),
+        nn.Linear(w3, 10, bias=False),
         Mul(hyp['net']['scaling_factor']),
     )
     net[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
