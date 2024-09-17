@@ -406,7 +406,7 @@ if __name__ == '__main__':
         # 3 bits
         (2, 1, 0), # {0, 1/4, 1/2, 3/4, 1, 5/4, 3/2, 7/4}
         (1, 2, -1), # {0, 1/4, 1/2, 3/4, 1, 3/2, 2, 3}
-        (0, 3, -4), # {0, 1/16, 1/8, 1/4, 1/2, 1, 2, 3}
+        (0, 3, -3), # {0, 1/8, 1/4, 1/2, 1, 2, 4, 8}
         # 4 bits
         (2, 2, 0), # {0, 1/4, 1/2, 3/4, 1, ..., 4, 5, 6, 7}
         (1, 3, -3), # {0, 1/16, 1/8, 3/16, ..., 4, 6, 8, 12}
@@ -426,5 +426,8 @@ if __name__ == '__main__':
         for mea in cast_settings:
             hyp['net']['width_factor'] = w
             hyp['net']['MEA'] = mea
-            res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)]))
+            res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(100)]))
+            obj = dict(w=w, mea=mea, res=res)
+            import uuid
+            torch.save(obj, 'logs/%s.pt' % uuid.uuid4())
 
