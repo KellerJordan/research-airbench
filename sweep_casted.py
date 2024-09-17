@@ -21,18 +21,6 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-"""
-Parametrization/scaling experiments...
-
-width=2 -> 94.62(n=25)
-width=2 flr=0.05 -> 94.53(n=25)
-width=2 flr=0.09 -> 94.51(n=25)
-
-width=1 e=20 -> 94.49(n=25)
-width=1 e=20 flr=0.05 -> 94.37(n=25)
-width=1 e=20 flr=0.09 -> 94.48(n=25)
-"""
-
 hyp = {
     'opt': {
         'epochs': 10,
@@ -63,25 +51,7 @@ hyp = {
         # And (0, 1, 0) is ternary. Among positives, it represents 1 as a normal number, and 0 as the subnormal number.
         # Note that there's always a sign bit, so ternary is {-1, 0, 1}.
         # See `cast_tensor` for more documentation.
-
-        # baselines
-        #'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
-        'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
-        # 2 bits
-        #'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25)
-        # 3 bits
-        #'MEA': (0, 2, -3), # {0, 1/8, 1/4, 1/2} -> 93.05(n=25)
-        #'MEA': (0, 2, -2), # {0, 1/4, 1/2, 1} -> still bad
-        #'MEA': (0, 2, -1), # {0, 1/2, 1, 2} -> 93.54(n=25)
-        #'MEA': (1, 1, -1), # {0, 1/4, 1/2, 3/4} -> bad
-        #'MEA': (1, 1, 0), # {0, 1/2, 1, 3/2} -> 93.51(n=25)
-        #'MEA': (1, 1, 1), # {0, 1, 2, 3} ->  93.54(n=25)
-        # 4 bits
-        # 5 bits
-        #'MEA': (0, 4, -9), # {0, 2**-9, ..., 1/2, 1, 2, ..., 2**5} -> 93.66(n=25)
-        'MEA': (1, 3, -3), # {0, 1/16, 1/8, 3/16, ..., 4, 6, 8, 12} -> 93.74(n=25)
-        #'MEA': (2, 2, 0), # {0, 1/4, 1/2, 3/4, 1, ..., 4, 5, 6, 7} -> 93.75(n=25)
-       
+        'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
     },
 }
 
@@ -421,6 +391,40 @@ if __name__ == '__main__':
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
-    print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(25)])))
+    # (M, E, A)
+    cast_settings = [
+        # baselines
+        (10, 5, -14),
+        (2, 5, -14),
+        # 1 bit (not counting the sign bit)
+        (0, 1, 0), # {0, 1}
+        # 2 bits
+        (0, 2, -1), # {0, 1/2, 1, 2}
+        (0, 2, 0), # {0, 1, 2, 4}
+        (1, 1, 0), # {0, 1/2, 1, 3/2}
+        (1, 1, 1), # {0, 1, 2, 3}
+        # 3 bits
+        (2, 1, 0), # {0, 1/4, 1/2, 3/4, 1, 5/4, 3/2, 7/4}
+        (1, 2, -1), # {0, 1/4, 1/2, 3/4, 1, 3/2, 2, 3}
+        (0, 3, -4), # {0, 1/16, 1/8, 1/4, 1/2, 1, 2, 3}
+        # 4 bits
+        (2, 2, 0), # {0, 1/4, 1/2, 3/4, 1, ..., 4, 5, 6, 7}
+        (1, 3, -3), # {0, 1/16, 1/8, 3/16, ..., 4, 6, 8, 12}
+        (0, 4, -9), # {0, 2**-9, ..., 1/2, 1, 2, ..., 2**5}
+    ]
+    width_settings = [
+        0.25,
+        0.5,
+        0.75,
+        1.0,
+        1.5,
+        2.0,
+        3.0,
+        4.0,
+    ]
+    for w in width_settings:
+        for mea in cast_settings:
+            hyp['net']['width_factor'] = w
+            hyp['net']['MEA'] = mea
+            res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)]))
 
