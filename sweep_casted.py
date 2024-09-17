@@ -424,9 +424,9 @@ if __name__ == '__main__':
         3.0,
         4.0,
     ]
-    for w in width_settings:
-        for mea in cast_settings:
-            for epochs in [10, 20]:
+    for epochs in [10, 20]:
+        for w in width_settings:
+            for mea in cast_settings:
                 hyp['opt']['epochs'] = epochs
                 hyp['net']['width_factor'] = w
                 hyp['net']['MEA'] = mea
