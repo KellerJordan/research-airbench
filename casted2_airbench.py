@@ -31,6 +31,12 @@ width=2 flr=0.09 -> 94.51(n=25)
 width=1 e=20 -> 94.49(n=25)
 width=1 e=20 flr=0.05 -> 94.37(n=25)
 width=1 e=20 flr=0.09 -> 94.48(n=25)
+
+width=1.5 ternary -> 93.77(n=5)
+width=1/1.5 fullp -> 92.93(n=5)
+width=0.5 fullp -> 91.78(n=5)
+width=0.75 ternary -> 92.15(n=5)
+
 """
 
 hyp = {
@@ -49,7 +55,7 @@ hyp = {
         'translate': 2,
     },
     'net': {
-        'width_factor': 1,
+        'width_factor': 0.75,
         'widths': {
             'block1': 64,
             'block2': 256,
@@ -68,7 +74,7 @@ hyp = {
         #'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
         #'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
         # 2 bits
-        'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25)
+        'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25),92.98(n=25)
         # If we scale s*=1.5 -> 92.88(n=25)
         # If we scale s*=0.66 -> 92.95(n=25)
         # If we scale s*=0.83 -> 92.98(n=25) (this is scaling *up* the weights, so *more* are {-1, +1}, roughly 33% now)
@@ -431,5 +437,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(25)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(5)])))
 

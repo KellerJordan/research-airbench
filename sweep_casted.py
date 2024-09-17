@@ -413,21 +413,25 @@ if __name__ == '__main__':
         (0, 4, -9), # {0, 2**-9, ..., 1/2, 1, 2, ..., 2**5}
     ]
     width_settings = [
-        0.25,
         0.5,
         0.75,
         1.0,
+        1.25,
         1.5,
+        1.75,
         2.0,
+        2.5,
         3.0,
         4.0,
     ]
     for w in width_settings:
         for mea in cast_settings:
-            hyp['net']['width_factor'] = w
-            hyp['net']['MEA'] = mea
-            res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(100)]))
-            obj = dict(w=w, mea=mea, res=res)
-            import uuid
-            torch.save(obj, 'logs/%s.pt' % uuid.uuid4())
+            for epochs in [10, 20]:
+                hyp['opt']['epochs'] = epochs
+                hyp['net']['width_factor'] = w
+                hyp['net']['MEA'] = mea
+                res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(100)]))
+                obj = dict(w=w, mea=mea, res=res)
+                import uuid
+                torch.save(obj, 'logs/%s.pt' % uuid.uuid4())
 
