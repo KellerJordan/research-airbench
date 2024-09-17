@@ -134,17 +134,15 @@ def renorm_sgd(params: List[Tensor],
             else:
                 d_p = buf
 
-        #s = d_p[0].numel()**0.5 # desired per-filter norm
-        s = 1
-        shape = [len(d_p)]+[1]*(len(d_p.shape)-1)
-        # rescale the gradient of each filter to have norm s
-        filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
-        d_p = d_p * s / filter_grad_norms.view(*shape)
-        # take a step using the normalized gradients
-        param.data.add_(d_p, alpha=-lr)
-        # rescale each filter to have norm s
+        shape = [len(param)]+[1]*(len(param.shape)-1)
+        # normalize each filter
         filter_data_norms = param.data.reshape(len(param), -1).norm(dim=1)
-        param.data.div_(filter_data_norms.view(*shape) / s)
+        param.data.div_(filter_data_norms.view(*shape))
+        # normalize each filter gradient
+        filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
+        update = d_p / filter_grad_norms.view(*shape)
+        # take a step using the normalized gradients
+        param.data.add_(update, alpha=-lr)
 
 #############################################
 #            Network Components             #
@@ -317,5 +315,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(25)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
 
