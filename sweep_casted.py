@@ -401,16 +401,16 @@ if __name__ == '__main__':
         # 2 bits
         (0, 2, -1), # {0, 1/2, 1, 2}
         (0, 2, 0), # {0, 1, 2, 4}
-        (1, 1, 0), # {0, 1/2, 1, 3/2}
-        (1, 1, 1), # {0, 1, 2, 3}
+        #(1, 1, 0), # {0, 1/2, 1, 3/2}
+        #(1, 1, 1), # {0, 1, 2, 3}
         # 3 bits
-        (2, 1, 0), # {0, 1/4, 1/2, 3/4, 1, 5/4, 3/2, 7/4}
+        #(2, 1, 0), # {0, 1/4, 1/2, 3/4, 1, 5/4, 3/2, 7/4}
         (1, 2, -1), # {0, 1/4, 1/2, 3/4, 1, 3/2, 2, 3}
         (0, 3, -3), # {0, 1/8, 1/4, 1/2, 1, 2, 4, 8}
         # 4 bits
-        (2, 2, 0), # {0, 1/4, 1/2, 3/4, 1, ..., 4, 5, 6, 7}
-        (1, 3, -3), # {0, 1/16, 1/8, 3/16, ..., 4, 6, 8, 12}
-        (0, 4, -9), # {0, 2**-9, ..., 1/2, 1, 2, ..., 2**5}
+        #(2, 2, 0), # {0, 1/4, 1/2, 3/4, 1, ..., 4, 5, 6, 7}
+        #(1, 3, -3), # {0, 1/16, 1/8, 3/16, ..., 4, 6, 8, 12}
+        #(0, 4, -9), # {0, 2**-9, ..., 1/2, 1, 2, ..., 2**5}
     ]
     width_settings = [
         0.5,
@@ -422,17 +422,15 @@ if __name__ == '__main__':
         2.0,
         2.5,
         3.0,
-        3.5,
-        4.0,
     ]
-    for epochs in [10, 20]:
+    for epochs in [20]:
         for w in width_settings:
             for mea in cast_settings:
                 hyp['opt']['epochs'] = epochs
                 hyp['net']['width_factor'] = w
                 hyp['net']['MEA'] = mea
                 res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(100)]))
-                obj = dict(w=w, mea=mea, res=res)
+                obj = dict(w=w, mea=mea, res=res, epochs=epochs)
                 import os
                 os.makedirs('logs', exist_ok=True)
                 import uuid
