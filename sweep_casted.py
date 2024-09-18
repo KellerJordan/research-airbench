@@ -433,6 +433,8 @@ if __name__ == '__main__':
                 hyp['net']['MEA'] = mea
                 res = torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(100)]))
                 obj = dict(w=w, mea=mea, res=res)
+                import os
+                os.makedirs('logs', exist_ok=True)
                 import uuid
                 torch.save(obj, 'logs/%s.pt' % uuid.uuid4())
 
