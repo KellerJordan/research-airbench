@@ -1,10 +1,14 @@
 """
-casted2_airbench.py
+sweep_casted.py
 
-Variant of clean_airbench which uses the renormalized optimizer.
-Also removes dirac initialization, for the purpose of casting experiments.
+The base training here is a variant of clean_airbench which uses the renormalized optimizer,
+which is optimal for CIFAR-10 training.
+We also removed dirac initialization, for the purpose of casting experiments.
 
 In full precision, attains 93.78 mean accuracy (n=50).
+
+This code sweeps over a large number of number formats and widths, training 100
+models per setting.
 """
 
 #############################################
