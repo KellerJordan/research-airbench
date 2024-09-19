@@ -1,27 +1,10 @@
 """
-casted_airbench.py
+casted2_airbench.py
 
-Accuracy.
-With dirac initialization: 93.95 (n=100)
-Without dirac: 93.60 (n=100)
+Variant of clean_airbench which uses the renormalized optimizer.
+Also removes dirac initialization, for the purpose of casting experiments.
 
-Casting parameters (M, E, A):
-
-Divide by sqrt(in_channels):
-(0, 4, -9) -> 93.42 (n=100)
-(0, 2, -3) -> 93.32 (n=100) [weights in ±{0, 1/8, 1/4, 1/2}]
-(0, 1, -2) -> 92.73 (n=100) [ternary weights in ±{0, 1/4}]
-
-Divide by w.abs().mean():
-(0, 4, -9) -> 93.45 (n=100)
-(0, 1, 0) -> 92.70 (n=100)
-(0, 1, 1) -> 92.78 (n=25) [tried n=100 but one of the runs NaNed]
-(0, 2, 0) -> 93.32 (n=25)
-(0, 2, -1) -> 93.24 (n=25)
-(1, 2, 0) -> 93.50 (n=25)
-(10, 5, -14) -> 93.58 (n=25)
-(2, 5, -14) -> 93.57 (n=25)
-
+In full precision, attains 93.78 mean accuracy (n=50).
 """
 
 #############################################
@@ -38,23 +21,32 @@ from airbench import evaluate, CifarLoader
 
 torch.backends.cudnn.benchmark = True
 
-w = 0 # log_2(width multipler)
+"""
+Parametrization/scaling experiments...
 
-# See `cast_tensor`.
-#M, E, A = 10, 5, -14 # torch.half
-M, E, A = 2, 5, -14 # torch.float8_e5m2
-#M, E, A = 0, 4, -9
-#M, E, A = 0, 2, -3
-#M, E, A = 0, 1, -2
-#M, E, A  = 1, 2, 0
+width=2 -> 94.62(n=25)
+width=2 flr=0.05 -> 94.53(n=25)
+width=2 flr=0.09 -> 94.51(n=25)
+
+width=1 e=20 -> 94.49(n=25)
+width=1 e=20 flr=0.05 -> 94.37(n=25)
+width=1 e=20 flr=0.09 -> 94.48(n=25)
+
+width=1.5 ternary -> 93.77(n=5)
+width=1/1.5 fullp -> 92.93(n=5)
+width=0.5 fullp -> 91.78(n=5)
+width=0.75 ternary -> 92.15(n=5)
+
+"""
 
 hyp = {
     'opt': {
         'epochs': 10,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
+        'filter_lr': 0.05,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
         'momentum': 0.85,
-        'weight_decay': 0.012,  # weight decay per 1024 examples (decoupled from learning rate)
+        'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
         'label_smoothing': 0.2,
     },
@@ -63,15 +55,130 @@ hyp = {
         'translate': 2,
     },
     'net': {
+        'width_factor': 3.0,
         'widths': {
-            'block1': round(1.5**w * 64),
-            'block2': round(1.5**w * 256),
-            'block3': round(1.5**w * 256),
+            'block1': 64,
+            'block2': 256,
+            'block3': 256,
         },
         'scaling_factor': 1/9,
         'tta_level': 2,
+
+        # M=(number of mantissa bits), E=(number of exponent bits), A=(log_2 of smallest normal number)
+        # For example, (7, 0, 7) is int8 (everything subnormal), and (2, 5, -14) is torch.float8_e5m2.
+        # And (0, 1, 0) is ternary. Among positives, it represents 1 as a normal number, and 0 as the subnormal number.
+        # Note that there's always a sign bit, so ternary is {-1, 0, 1}.
+        # See `cast_tensor` for more documentation.
+
+        # baselines
+        #'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
+        #'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
+        # 2 bits
+        'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25),92.98(n=25)
+        # If we scale s*=1.5 -> 92.88(n=25)
+        # If we scale s*=0.66 -> 92.95(n=25)
+        # If we scale s*=0.83 -> 92.98(n=25) (this is scaling *up* the weights, so *more* are {-1, +1}, roughly 33% now)
+        # If we do the /= W.abs().mean() thing from the paper -> 92.92(n=25)
+        # 3 bits
+        #'MEA': (0, 2, -3), # {0, 1/8, 1/4, 1/2} -> 93.05(n=25)
+        #'MEA': (0, 2, -2), # {0, 1/4, 1/2, 1} -> still bad
+        #'MEA': (0, 2, -1), # {0, 1/2, 1, 2} -> 93.54(n=25)
+        #'MEA': (1, 1, -1), # {0, 1/4, 1/2, 3/4} -> bad
+        #'MEA': (1, 1, 0), # {0, 1/2, 1, 3/2} -> 93.51(n=25)
+        #'MEA': (1, 1, 1), # {0, 1, 2, 3} ->  93.54(n=25)
+        # 4 bits
+        #'MEA': (0, 3, -3), # {0, 1/8, 1/4, 1/2, 1, 2, 4, 8} -> 93.65(n=25)
+        #'MEA': (1, 2, -1), # {0, 1/4, 1/2, 3/4, 1, 3/2, 2, 3} -> 93.67(n=25)
+        #'MEA': (2, 1, 0), # {0, 1/4, 1/2, 3/4, 1, 5/4, 3/2, 7/4} -> 93.60(n=25)
+        # 5 bits
+        #'MEA': (0, 4, -9), # {0, 2**-9, ..., 1/2, 1, 2, ..., 2**5} -> 93.66(n=25)
+        #'MEA': (1, 3, -3), # {0, 1/16, 1/8, 3/16, ..., 4, 6, 8, 12} -> 93.74(n=25)
+        #'MEA': (2, 2, 0), # {0, 1/4, 1/2, 3/4, 1, ..., 4, 5, 6, 7} -> 93.75(n=25)
+       
     },
 }
+
+#############################################
+#          Renormalized Optimizer           #
+#############################################
+
+import torch
+from torch import Tensor
+from torch.optim.optimizer import Optimizer
+from typing import List, Optional
+
+class RenormSGD(Optimizer):
+    def __init__(self, params, lr=1e-3, momentum=0, dampening=0, nesterov=False):
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if momentum < 0.0:
+            raise ValueError(f"Invalid momentum value: {momentum}")
+        if nesterov and (momentum <= 0 or dampening != 0):
+            raise ValueError("Nesterov momentum requires a momentum and zero dampening")
+        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
+                        nesterov=nesterov)
+        super().__init__(params, defaults)
+
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            params_with_grad = [p for p in group['params'] if p.grad is not None]
+            d_p_list = [p.grad for p in params_with_grad]
+            momentum_buffer_list = [self.state[p].get('momentum_buffer') for p in params_with_grad]
+
+            renorm_sgd(params_with_grad,
+                       d_p_list,
+                       momentum_buffer_list,
+                       momentum=group['momentum'],
+                       lr=group['lr'],
+                       dampening=group['dampening'],
+                       nesterov=group['nesterov'])
+
+            # update momentum_buffers in state
+            for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
+                self.state[p]['momentum_buffer'] = momentum_buffer
+
+        return loss
+
+def renorm_sgd(params: List[Tensor],
+               d_p_list: List[Tensor],
+               momentum_buffer_list: List[Optional[Tensor]],
+               *,
+               momentum: float,
+               lr: float,
+               dampening: float,
+               nesterov: bool):
+
+    for i, param in enumerate(params):
+        d_p = d_p_list[i]
+
+        if momentum != 0:
+            buf = momentum_buffer_list[i]
+
+            if buf is None:
+                buf = torch.clone(d_p).detach()
+                momentum_buffer_list[i] = buf
+            else:
+                buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
+
+            if nesterov:
+                d_p = d_p.add(buf, alpha=momentum)
+            else:
+                d_p = buf
+
+        shape = [len(param)]+[1]*(len(param.shape)-1)
+        # normalize each filter
+        filter_data_norms = param.data.reshape(len(param), -1).norm(dim=1)
+        param.data.div_(filter_data_norms.view(*shape))
+        # normalize each filter gradient
+        filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
+        update = d_p / filter_grad_norms.view(*shape)
+        # take a step using the normalized gradients
+        param.data.add_(update, alpha=-lr)
 
 #############################################
 #            Network Components             #
@@ -171,9 +278,12 @@ class CastedConv(nn.Conv2d):
         # while the updates go to the high precision weights. This can be thought of
         # as a "straight-through estimator".
 
-        #s = self.weight.size(1)**0.5
-        s = 1 / self.weight.data.abs().mean()
+        s = self.weight[0].numel()**0.5
+        #s *= 1.5
+        #s *= 0.83
+        #s = 1 / self.weight.data.abs().mean()
 
+        M, E, A = hyp['net']['MEA']
         w = (1/s) * cast_tensor(s * self.weight, M, E, A)
         return F.conv2d(x, w, padding=self.padding, bias=self.bias)
 
@@ -196,6 +306,15 @@ class ConvGroup(nn.Module):
         x = self.norm2(x)
         x = self.activ(x)
         return x
+
+class Conv(nn.Conv2d): # this is just for the first layer
+    def __init__(self, in_channels, out_channels, kernel_size=3, padding='same', bias=False):
+        super().__init__(in_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=bias)
+
+    def reset_parameters(self):
+        super().reset_parameters()
+        if self.bias is not None:
+            self.bias.data.zero_()
 
 #############################################
 #            Network Definition             #
@@ -227,15 +346,19 @@ def make_net():
     widths = hyp['net']['widths']
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
+    w = hyp['net']['width_factor']
+    w1 = int(w*widths['block1'])
+    w2 = int(w*widths['block2'])
+    w3 = int(w*widths['block3'])
     net = nn.Sequential(
-        CastedConv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
+        Conv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
         nn.GELU(),
-        ConvGroup(whiten_width,     widths['block1']),
-        ConvGroup(widths['block1'], widths['block2']),
-        ConvGroup(widths['block2'], widths['block3']),
+        ConvGroup(whiten_width, w1),
+        ConvGroup(w1, w2),
+        ConvGroup(w2, w3),
         nn.MaxPool2d(3),
         Flatten(),
-        nn.Linear(widths['block3'], 10, bias=False),
+        nn.Linear(w3, 10, bias=False),
         Mul(hyp['net']['scaling_factor']),
     )
     net[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
@@ -268,11 +391,13 @@ def train(train_loader):
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
     total_train_steps = epochs * len(train_loader)
 
-    norm_biases = [p for k, p in model.named_parameters() if 'norm' in k]
-    other_params = [p for k, p in model.named_parameters() if 'norm' not in k]
+    filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
+    norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
+    other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
+    optimizer1 = RenormSGD(filter_params, lr=hyp['opt']['filter_lr'], momentum=hyp['opt']['momentum'], nesterov=True)
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
+    optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.2)
         warmdown_steps = total_train_steps - warmup_steps
@@ -282,7 +407,8 @@ def train(train_loader):
         else:
             frac = (step - warmup_steps) / warmdown_steps
             return (1 - frac)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, get_lr)
+    scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
+    scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
 
     current_steps = 0
     train_loader.epoch = 0
@@ -293,10 +419,12 @@ def train(train_loader):
 
             outputs = model(inputs)
             loss = loss_fn(outputs, labels).sum()
-            optimizer.zero_grad(set_to_none=True)
+            model.zero_grad()
             loss.backward()
-            optimizer.step()
-            scheduler.step()
+            optimizer1.step()
+            optimizer2.step()
+            scheduler1.step()
+            scheduler2.step()
 
             current_steps += 1
             if current_steps == total_train_steps:
@@ -309,6 +437,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level'])
-                                       for _ in range(25)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
 
