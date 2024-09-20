@@ -44,7 +44,7 @@ hyp = {
         'epochs': 10,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
-        'filter_lr': 0.05,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
+        'filter_lr': 0.07,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
         'momentum': 0.85,
         'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
@@ -55,7 +55,7 @@ hyp = {
         'translate': 2,
     },
     'net': {
-        'width_factor': 3.0,
+        'width_factor': 1.0,
         'widths': {
             'block1': 64,
             'block2': 256,
@@ -72,9 +72,9 @@ hyp = {
 
         # baselines
         #'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
-        #'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
+        'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
         # 2 bits
-        'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25),92.98(n=25)
+        #'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25),92.98(n=25)
         # If we scale s*=1.5 -> 92.88(n=25)
         # If we scale s*=0.66 -> 92.95(n=25)
         # If we scale s*=0.83 -> 92.98(n=25) (this is scaling *up* the weights, so *more* are {-1, +1}, roughly 33% now)
@@ -437,5 +437,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(50)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(5)])))
 
