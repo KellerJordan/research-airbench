@@ -4,7 +4,11 @@ renorm_airbench.py
 Variant of clean_airbench which uses the renormalized optimizer.
 
 Attains 94.07 mean accuracy (n=50).
-If you set weight decay for the biases and linear layer to zero, then 93.98(n=50).
+
+- What if we set the weight decay for biases and linear layer to zero? Then 93.98(n=50)
+- What if we also don't optimize the whiten bias? Then 93.88(n=50)
+- What if we also don't optimize the batchnorm biases? Then 93.41(n=50)
+- What if we don't optimize the whiten bias, and optimize the batchnorm biases using Adam(lr=0.05, eps=1e-6, betas=(0.85, 0.99))? Then 93.85(n=50)
 """
 
 #############################################
