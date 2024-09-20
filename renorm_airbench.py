@@ -147,16 +147,15 @@ def renorm_sgd(params: List[Tensor],
             else:
                 d_p = buf
 
-        g = d_p
-        shape = [len(g)]+[1]*(len(g.shape)-1)
-        # normalize each filter's gradient
-        grad_scale = g.reshape(len(g), -1).norm(dim=1)
-        g = g / grad_scale.view(*shape)
-        # take a step
-        param.data.add_(g, alpha=-lr)
-        # re-normalize each filter
-        norm_scale = param.data.reshape(len(param), -1).norm(dim=1)
-        param.data.div_(norm_scale.view(*shape))
+        shape = [len(param)]+[1]*(len(param.shape)-1)
+        # normalize each filter
+        filter_data_norms = param.data.reshape(len(param), -1).norm(dim=1)
+        param.data.div_(filter_data_norms.view(*shape))
+        # normalize each filter gradient
+        filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
+        update = d_p / filter_grad_norms.view(*shape)
+        # take a step using the normalized gradients
+        param.data.add_(update, alpha=-lr)
 
 #############################################
 #            Network Components             #
