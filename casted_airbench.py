@@ -26,7 +26,6 @@ Parametrization/scaling experiments...
 
 width=2 -> 94.62(n=25)
 width=2 flr=0.05 -> 94.53(n=25)
-width=2 flr=0.09 -> 94.51(n=25)
 
 width=1 e=20 -> 94.49(n=25)
 width=1 e=20 flr=0.05 -> 94.37(n=25)
@@ -72,7 +71,8 @@ hyp = {
 
         # baselines
         #'MEA': (10, 5, -14), # torch.half -> 93.78(n=50)
-        'MEA': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
+        'MEA_weight': (2, 5, -14), # torch.float8_e5m2 -> 93.84(n=25), 93.76(n=25)
+        'MEA_activ': (10, 5, -14),
         # 2 bits
         #'MEA': (0, 1, 0), # {0, 1} -> 93.02(n=25),92.98(n=25)
         # If we scale s*=1.5 -> 92.88(n=25)
@@ -273,7 +273,7 @@ class CastedConv(nn.Conv2d):
         
     def forward(self, x):
         if len(self.weight) == 24:
-            return F.conv2d(x, self.weight, padding=self.padding, bias=self.bias)
+            return cast_tensor(F.conv2d(x, self.weight, padding=self.padding, bias=self.bias), *hyp['net']['MEA_activ'])
         # Uses the casted weights for both forward and backward pass,
         # while the updates go to the high precision weights. This can be thought of
         # as a "straight-through estimator".
@@ -283,9 +283,8 @@ class CastedConv(nn.Conv2d):
         #s *= 0.83
         #s = 1 / self.weight.data.abs().mean()
 
-        M, E, A = hyp['net']['MEA']
-        w = (1/s) * cast_tensor(s * self.weight, M, E, A)
-        return F.conv2d(x, w, padding=self.padding, bias=self.bias)
+        w = (1/s) * cast_tensor(s * self.weight, *hyp['net']['MEA_weight'])
+        return cast_tensor(F.conv2d(x, w, padding=self.padding, bias=self.bias), *hyp['net']['MEA_activ'])
 
 class ConvGroup(nn.Module):
     def __init__(self, channels_in, channels_out):
