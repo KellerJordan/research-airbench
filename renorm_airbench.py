@@ -4,6 +4,7 @@ renorm_airbench.py
 Variant of clean_airbench which uses the renormalized optimizer.
 
 Attains 94.07 mean accuracy (n=50).
+If you set weight decay for the biases and linear layer to zero, then 93.98(n=50).
 """
 
 #############################################
