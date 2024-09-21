@@ -283,7 +283,6 @@ def train(train_loader):
     from tqdm import tqdm
     for epoch in tqdm(range(epochs)):
         for inputs, labels in train_loader:
-
             outputs = model(inputs)
             loss = loss_fn(outputs, labels).sum()
             model.zero_grad()
