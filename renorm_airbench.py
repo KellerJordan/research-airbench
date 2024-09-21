@@ -26,34 +26,6 @@ from airbench import evaluate, CifarLoader
 torch.backends.cudnn.benchmark = True
 
 w = 1.0
-
-"""
-Parametrization/scaling experiments...
-
-* width=0.5 scaling_factor=1/5 -> 92.31(n=25)
-* width=0.5 scaling_factor=1/6.4 -> 92.30(n=50)
-* width=0.5 scaling_factor=1/9 -> 92.19(n=25)
-
-* width=1 scaling_factor=1/6.4 -> 94.04(n=25)
-* width=1 scaling_factor=1/9 -> 94.07(n=50)
-
-* width=2.0 scaling_factor=1/9 -> 94.88(n=50)
-* width=2.0 scaling_factor=1/12.7 -> 94.79(n=25)
-
---
-
-
-* width=0.5 scaling_factor=1/6.4 flr=0.05 -> 92.15(n=50)
-* width=0.5 scaling_factor=1/6.4 flr=0.06 -> 92.26(n=50)
-* width=0.5 scaling_factor=1/6.4 flr=0.08 -> 92.25(n=50)
-* width=0.5 scaling_factor=1/6.4 flr=0.09 -> 92.16(n=25)
-
-* width=2.0 scaling_factor=1/9 flr=0.05 -> 94.85 (n=25)
-* width=2.0 scaling_factor=1/9 flr=0.09 -> 94.75 (n=25)
-
-
-"""
-
 hyp = {
     'opt': {
         'epochs': 10,
@@ -283,9 +255,10 @@ def train(train_loader):
     wd = hyp['opt']['weight_decay'] * train_loader.batch_size / kilostep_scale
     lr_biases = lr * hyp['opt']['bias_scaler']
 
-    model = make_net()
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
     total_train_steps = epochs * len(train_loader)
+
+    model = make_net()
 
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
@@ -306,9 +279,7 @@ def train(train_loader):
     scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
     scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
 
-    current_steps = 0
     train_loader.epoch = 0
-    model.train()
     from tqdm import tqdm
     for epoch in tqdm(range(epochs)):
         for inputs, labels in train_loader:
@@ -321,10 +292,6 @@ def train(train_loader):
             optimizer2.step()
             scheduler1.step()
             scheduler2.step()
-
-            current_steps += 1
-            if current_steps == total_train_steps:
-                break
 
     return model
 
