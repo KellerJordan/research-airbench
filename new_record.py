@@ -145,13 +145,13 @@ class ZeroPowerSGD(Optimizer):
         return loss
 
 def zeropower_sgd(params: List[Tensor],
-                 d_p_list: List[Tensor],
-                 momentum_buffer_list: List[Optional[Tensor]],
-                 *,
-                 momentum: float,
-                 lr: float,
-                 dampening: float,
-                 nesterov: bool):
+                  d_p_list: List[Tensor],
+                  momentum_buffer_list: List[Optional[Tensor]],
+                  *,
+                  momentum: float,
+                  lr: float,
+                  dampening: float,
+                  nesterov: bool):
 
     for i, param in enumerate(params):
         d_p = d_p_list[i]
