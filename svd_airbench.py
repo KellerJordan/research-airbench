@@ -24,7 +24,7 @@ torch.backends.cudnn.benchmark = True
 w = 1.0
 hyp = {
     'opt': {
-        'epochs': 10,
+        'epochs': 8,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
         'filter_lr': 0.07,      # the norm of the orthogonal update applied to each conv filter each step, which are all norm-1
@@ -294,9 +294,20 @@ def train(train_loader):
     return model
 
 if __name__ == '__main__':
+
+    import sys
+    with open(sys.argv[0]) as f:
+        code = f.read()
+
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(10)])))
+    accs = torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(10)])
+    print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
+    import os
+    import uuid
+    os.makedirs('logs', exist_ok=True)
+    log = {'code': code, 'accs': accs}
+    torch.save(log, 'logs/%s.pt' % uuid.uuid4())
 
