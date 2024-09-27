@@ -3,9 +3,14 @@ svd_airbench.py
 
 Variant of clean_airbench which uses a slow SVD-based optimizer.
 
-If you use normal warmup, then attains 94.00(n=80) accuracy in only 8 epochs.
-If you use no warmup at all, then attains 94.03(n=96).
-If you use no warmup for filters and normal warmup for norm biases etc, then attains 94.02(n=96).
+First, always with renormalizing every filter to have unit norm:
+* If you use normal warmup, then attains 94.00(n=80) accuracy in only 8 epochs.
+* If you use no warmup at all, then attains 94.03(n=96).
+* If you use no warmup for filters and normal warmup for norm biases etc, then attains 94.02(n=96).
+Now moving to no warmup at all by default:
+* Renormalizing the entire layer to have sqrt(channels_out) norm: 94.06(n=120)
+Now moving to renormalize the entire layer to have sqrt(channels_out) by default:
+* Learning rate=0.25: 
 
 """
 
