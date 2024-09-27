@@ -127,9 +127,8 @@ def renorm_sgd(params: List[Tensor],
         #filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
         #update = d_p / filter_grad_norms.view(*shape)
         # whiten the gradient
-        #U, _, V = d_p.reshape(len(d_p), -1).float().svd()
-        U, _, VT = torch.linalg.svd(d_p.reshape(len(d_p), -1).float(), full_matrices=False)
-        update = (U @ VT).to(param.dtype).view(param.shape)
+        U, _, V = d_p.reshape(len(d_p), -1).float().svd()
+        update = (U @ V.T).to(param.dtype).view(param.shape)
         # take a step using the normalized gradients
         param.data.add_(update, alpha=-lr)
 
