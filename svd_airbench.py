@@ -3,7 +3,10 @@ svd_airbench.py
 
 Variant of clean_airbench which uses a slow SVD-based optimizer.
 
-Attains 94.00(n=80) accuracy in only 8 epochs.
+If you use normal warmup, then attains 94.00(n=80) accuracy in only 8 epochs.
+If you use no warmup at all, then attains 94.03(n=96).
+If you use no warmup for filters and normal warmup for norm biases etc, then attains 94.02(n=96).
+
 """
 
 #############################################
@@ -121,8 +124,10 @@ def renorm_sgd(params: List[Tensor],
 
         shape = [len(param)]+[1]*(len(param.shape)-1)
         # normalize each filter
-        filter_data_norms = param.data.reshape(len(param), -1).norm(dim=1)
-        param.data.div_(filter_data_norms.view(*shape))
+        #filter_data_norms = param.data.reshape(len(param), -1).norm(dim=1)
+        #param.data.div_(filter_data_norms.view(*shape))
+        scale = param.data.norm() / len(param.data)**0.5
+        param.data.div_(scale)
         ## normalize each filter gradient
         #filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
         #update = d_p / filter_grad_norms.view(*shape)
