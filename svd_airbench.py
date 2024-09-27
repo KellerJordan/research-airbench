@@ -3,8 +3,7 @@ svd_airbench.py
 
 Variant of clean_airbench which uses a slow SVD-based optimizer.
 
-New defaults: bs=2000 lr=0.24 epochs=8 bias_lr=6.5 momentum=0.6 nesterov=True
-* -> 93.99(n=80)
+New defaults: bs=2000 lr=0.24 epochs=8 bias_lr=6.5 momentum=0.6 nesterov=True -> 94.01(n=320)
 
 """
 
