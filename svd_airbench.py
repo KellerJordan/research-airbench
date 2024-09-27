@@ -109,6 +109,7 @@ And with bs=5000, similarly we can reach 94 in 12 epochs (120 steps).
 This is dramatically better than what can be obtained with a more first order optimizer.
 
 New defaults: bs=2000 lr=0.24 epochs=8 bias_lr=6.5 momentum=0.6 nesterov=True
+* -> 94.04(n=40)
 
 """
 
@@ -237,8 +238,7 @@ def renorm_sgd(params: List[Tensor],
         # whiten the gradient
         U, S, V = d_p.reshape(len(d_p), -1).float().svd()
         new_S = torch.ones_like(S)
-        #new_S[len(S)//2:] = S[len(S)//2:]
-        new_S[:] = S[:]
+        #new_S[len(S)//2:] = S[len(S)//2:] / S[len(S)//2] # This doesn't seem to harm accuracy
         update = (U @ new_S.diag() @ V.T).to(param.dtype).view(param.shape)
         # take a step using the normalized gradients
         param.data.add_(update, alpha=-lr)
