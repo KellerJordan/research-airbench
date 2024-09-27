@@ -5,6 +5,10 @@ Variant of clean_airbench which uses a slow SVD-based optimizer.
 
 New defaults: bs=2000 lr=0.24 epochs=8 bias_lr=6.5 momentum=0.6 nesterov=True -> 94.01(n=320)
 
+Nice fact: neither of the following two lines hurts accuracy.
+1. `new_S *= 0.5**(0.2 * torch.randn_like(S))`
+2. `new_S[len(S)//2:] = S[len(S)//2:] / S[len(S)//2]`
+
 """
 
 #############################################

@@ -112,5 +112,17 @@ New defaults: bs=2000 lr=0.24 epochs=8 bias_lr=6.5 momentum=0.6 nesterov=True
 * -> 94.01(n=320)
 * Momentum=0.5 lr=0.3 -> 93.93(n=16)
 
+Now trying to use AdamW for the norm biases (still normal SGD for the whiten bias and fc layer)
+* lr=0 -> 93.71(n=8)
+* lr=0.02 -> 93.93(n=40)
+* lr=0.04 -> 93.96(n=40)
+* lr=0.04 betas=(0.85, 0.95) -> 93.96(n=40)
+* lr=0.08 betas=(0.85, 0.95) -> 94.01(n=24)
+* lr=0.16 betas=(0.85, 0.95) -> 93.95(n=24)
+* lr=0.08 betas=(0.85, 0.85) -> 93.94(n=24)
+* lr=0.08 betas=(0.85, 0.85) wd=0 -> 93.96(n=24)
+* lr=0.08 betas=(0.85, 0.85) wd=0.05 -> 93.99(n=24)
+* lr=0.08 betas=(0.85, 0.85) wd=0.10 -> 93.98(n=24)
+
 """
 
