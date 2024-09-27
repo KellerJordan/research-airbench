@@ -47,7 +47,7 @@ New defaults: lr=0.15 momentum=0.60 nesterov=True
 * Epochs=10 -> 94.35(n=8)
 * Epochs=20 -> 94.64(n=8)
 * Epochs=30 -> 94.78(n=8)
-* Epochs=40 -> 94.71(n=8)
+* Epochs=40 -> 94.71(n=8) [Note that the default optimizer also peaks at ~94.80, roughly at the same time?]
 
 New defaults: that with epochs=7 (-> 93.95(n=160))
 * Always add 0.1 to learning rate in scheduler (so peak is 1.1x and bottom is 0.1x) -> 93.50(n=40)
@@ -57,7 +57,47 @@ New defaults: that with epochs=7 (-> 93.95(n=160))
 * Replace the last 75% of singular values with themselves divided by the 25%ile value, rather than with 1.0 -> 93.82(n=16)
 * Replace the last 75% of singular values with themselves divided by the 25%ile value, rather than with 1.0; and then sqrt the last 75% -> 93.95(n=16)
 
+Longer training experiments:
+* Cutout=10 Epochs=30 -> 94.97(n=8) [Note that the default optimizer gets 94.76(n=5) in this setup]
+* Cutout=16 Translate=4 Epochs=80 -> 95.09(n=8) [Note that the default optimier gets 94.95(n=3)]
 
+Batch size experiments:
+* Bs=500 -> 93.73(n=8)
+* Bs=500 lr=0.10 -> 93.90(n=8)
+* Bs=500 lr=0.12 -> 93.92(n=8)
+* Bs=2000 -> 93.58(n=8)
+* Bs=2000 lr=0.18 -> 93.68(n=16)
+* Bs=2000 lr=0.20 -> 93.73(n=16)
+* Bs=2000 lr=0.24 -> 93.73(n=32)
+* Bs=2000 lr=0.30 -> 96.62(n=16)
+* Bs=2000 lr=0.24 momentum=0.5 -> 93.76(n=32)
+* Bs=2000 lr=0.30 momentum=0.5 -> 93.68(n=16)
+* Bs=2000 lr=0.24 momentum=0.4 -> 93.64(n=16)
+* Bs=2000 lr=0.30 momentum=0.4 -> 94.70(n=16)
+
+* Bs=2000 lr=0.24 Epochs=8 -> 93.94(n=8)
+
+* Bs=2500 lr=0.24 Epochs=8 -> 93.83(n=8)
+* Bs=2500 lr=0.24 Epochs=8 bias_lr=5.0 -> 93.96(n=16) [Reducing the bias lr is very important at large batch size!]
+* Bs=2500 lr=0.24 Epochs=4 bias_lr=5.0 -> 91.61(n=16)
+
+* Bs=5000 lr=0.24 Epochs=8 -> 89.25(n=8)
+* Bs=5000 lr=0.30 Epochs=8 -> 89.56(n=8)
+* Bs=5000 lr=0.24 Epochs=8 bias_lr=2.5 -> 92.82(n=8)
+* Bs=5000 lr=0.24 Epochs=12 bias_lr=2.5 -> 93.94(n=48)
+* Bs=5000 lr=0.30 Epochs=12 bias_lr=2.5 -> 93.98(n=64)
+* Bs=5000 lr=0.30 Epochs=12 bias_lr=4.0 -> 94.03(n=64)
+
+* Bs=10000 lr=0.30 Epochs=12 bias_lr=2.0 -> 91.29(n=32)
+* Bs=10000 lr=0.30 Epochs=18 bias_lr=2.0 -> 93.67(n=32)
+* Bs=10000 lr=0.30 Epochs=24 bias_lr=2.0 -> 94.12(n=32)
+* Bs=10000 lr=0.24 Epochs=18 bias_lr=2.0 -> 93.50(n=32)
+* Bs=10000 lr=0.40 Epochs=18 bias_lr=2.0 -> 93.42(n=32)
+* Bs=10000 lr=0.30 Epochs=18 bias_lr=3.0 -> 93.52(n=24)
+* Bs=10000 lr=0.30 Epochs=18 bias_lr=2.0 momentum=0.40 -> 93.42(n=24)
+* Bs=10000 lr=0.30 Epochs=20 bias_lr=2.0 -> 93.84(n=24)
+* Bs=10000 lr=0.30 Epochs=22 bias_lr=2.0 -> 94.05(n=24)
+* Bs=10000 lr=0.30 Epochs=22 bias_lr=2.0 bias_scaler=16.0 -> 93.88(n=24)
 
 """
 
