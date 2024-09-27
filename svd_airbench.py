@@ -302,7 +302,7 @@ if __name__ == '__main__':
     train_loader = CifarLoader('/tmp/cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'], altflip=True)
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
-    print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
+    #print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
     accs = torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(3)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
     import os
