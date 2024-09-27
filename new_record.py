@@ -31,11 +31,11 @@ torch.backends.cudnn.benchmark = True
 
 hyp = {
     'opt': {
-        'train_epochs': 8,
-        'batch_size': 2000,
-        'lr': 6.5,                 # learning rate per 1024 examples
+        'train_epochs': 9.9,
+        'batch_size': 1024,
+        'lr': 11.5,                 # learning rate per 1024 examples
         'momentum': 0.85,
-        'weight_decay': 0.015,     # weight decay per 1024 examples (decoupled from learning rate)
+        'weight_decay': 0.0153,     # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,        # scales up learning rate (but not weight decay) for BatchNorm biases
         'label_smoothing': 0.2,
         'whiten_bias_epochs': 3,    # how many epochs to train the whitening layer bias before freezing
@@ -491,7 +491,8 @@ def main(run, model_trainbias, model_freezebias):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    #optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer3 = torch.optim.SGD([whiten_bias], lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer1_trainbias = optimizer1
@@ -504,7 +505,8 @@ def main(run, model_trainbias, model_freezebias):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    #optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer1_freezebias = optimizer1
     optimizer2_freezebias = optimizer2
@@ -541,8 +543,8 @@ def main(run, model_trainbias, model_freezebias):
             model = model_freezebias
             old_optimizers = optimizers
             old_schedulers = schedulers
-            optimizers = [optimizer1_trainbias, optimizer2_trainbias]
-            schedulers = [scheduler1_trainbias, scheduler2_trainbias]
+            optimizers = [optimizer1_freezebias, optimizer2_freezebias]
+            schedulers = [scheduler1_freezebias, scheduler2_freezebias]
             model.load_state_dict(model_trainbias.state_dict())
             for i, (opt, sched) in enumerate(zip(optimizers, schedulers)):
                 opt.load_state_dict(old_optimizers[i].state_dict())
