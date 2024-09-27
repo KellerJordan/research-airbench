@@ -93,7 +93,7 @@ class RenormSGD(Optimizer):
                        nesterov=group['nesterov'])
 
             # update momentum_buffers in state
-            for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list, momentum2_buffer_list):
+            for p, momentum_buffer, momentum2_buffer in zip(params_with_grad, momentum_buffer_list, momentum2_buffer_list):
                 self.state[p]['momentum_buffer'] = momentum_buffer
                 self.state[p]['momentum2_buffer'] = momentum2_buffer
 
@@ -113,17 +113,24 @@ def renorm_sgd(params: List[Tensor],
 
         if momentum != 0:
             buf = momentum_buffer_list[i]
-
             if buf is None:
                 buf = torch.clone(d_p).detach()
                 momentum_buffer_list[i] = buf
             else:
                 buf.mul_(momentum).add_(d_p)
 
+            buf2 = momentum2_buffer_list[i]
+            if buf is None:
+                buf = torch.clone(d_p).detach()
+                momentum2_buffer_list[i] = buf2
+            else:
+                buf2.mul_(0.99).add_(d_p)
+
             if nesterov:
                 d_p = d_p.add(buf, alpha=momentum)
             else:
                 d_p = buf
+            d_p.add_(buf2, alpha=1.0)
 
         # normalize each filter
         param.data.div_(param.data.norm() / len(param)**0.5)
@@ -297,5 +304,5 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(25)])))
+    print(torch.std_mean(torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(10)])))
 
