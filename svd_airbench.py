@@ -10,7 +10,36 @@ First, always with renormalizing every filter to have unit norm:
 Now moving to no warmup at all by default:
 * Renormalizing the entire layer to have sqrt(channels_out) norm: 94.06(n=120)
 Now moving to renormalize the entire layer to have sqrt(channels_out) by default:
-* Learning rate=0.25: 
+* Learning rate=0.25: 94.04(n=24)
+* Just use normal grad, don't even do the SVD: 76.9(n=24)
+* Just use normal grad, but divide by top singular value: 90.95(n=16)
+* Divide by top singular value, then replace just top half of singular values by 1: 93.66(n=16)
+* Sanity check: replace all singular values by 1: 94.16(n=8)
+* Divide by top singular value, then sqrt all the singular values: 93.10(n=8)
+* Same then fourth root: 93.76(n=8)
+Now some optimizer hyperparam experiments:
+* lr=0.07 momentum=0.85 nesterov=True -> 93.94(n=8)
+* lr=0.10 momentum=0.85 nesterov=True -> 93.91(n=8)
+* lr=0.20 momentum=0.85 nesterov=True -> 93.31(n=8)
+
+* lr=0.12 momentum=0.70 nesterov=True -> 94.01(n=8)
+* lr=0.15 momentum=0.70 nesterov=True -> 94.06(n=8)
+
+* lr=0.12 momentum=0.60 nesterov=True -> 94.07(n=16)
+* lr=0.135 momentum=0.60 nesterov=True -> 94.15(n=8)
+* lr=0.15 momentum=0.60 nesterov=True -> 94.15(n=72) [best]
+* lr=0.16 momentum=0.60 nesterov=True -> 94.13(n=24)
+* lr=0.175 momentum=0.60 nesterov=True -> 94.04(n=8)
+* lr=0.20 momentum=0.60 nesterov=True -> 94.00(n=24)
+
+* lr=0.15 momentum=0.50 nesterov=True -> 94.09(n=16)
+* lr=0.16 momentum=0.50 nesterov=True -> 94.13(n=16)
+* lr=0.175 momentum=0.50 nesterov=True -> 94.12(n=16)
+* lr=0.18 momentum=0.50 nesterov=True -> 94.14(n=48)
+* lr=0.20 momentum=0.50 nesterov=True -> 94.14(n=32)
+----
+* lr=0.12 momentum=0.60 nesterov=False -> 94.11(n=8)
+* lr=0.15 momentum=0.60 nesterov=False -> 93.99(n=8)
 
 """
 
