@@ -62,15 +62,14 @@ from torch.optim.optimizer import Optimizer
 from typing import List, Optional
 
 class RenormSGD(Optimizer):
-    def __init__(self, params, lr=1e-3, momentum=0, dampening=0, nesterov=False):
+    def __init__(self, params, lr=1e-3, momentum=0, nesterov=False):
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr}")
         if momentum < 0.0:
             raise ValueError(f"Invalid momentum value: {momentum}")
-        if nesterov and (momentum <= 0 or dampening != 0):
-            raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
-                        nesterov=nesterov)
+        if nesterov and (momentum <= 0):
+            raise ValueError("Nesterov momentum requires a momentum")
+        defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov)
         super().__init__(params, defaults)
 
     def step(self, closure=None):
@@ -89,7 +88,6 @@ class RenormSGD(Optimizer):
                        momentum_buffer_list,
                        momentum=group['momentum'],
                        lr=group['lr'],
-                       dampening=group['dampening'],
                        nesterov=group['nesterov'])
 
             # update momentum_buffers in state
@@ -104,7 +102,6 @@ def renorm_sgd(params: List[Tensor],
                *,
                momentum: float,
                lr: float,
-               dampening: float,
                nesterov: bool):
 
     for i, param in enumerate(params):
@@ -117,7 +114,7 @@ def renorm_sgd(params: List[Tensor],
                 buf = torch.clone(d_p).detach()
                 momentum_buffer_list[i] = buf
             else:
-                buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
+                buf.mul_(momentum).add_(d_p)
 
             if nesterov:
                 d_p = d_p.add(buf, alpha=momentum)
