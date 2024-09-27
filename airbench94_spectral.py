@@ -1,4 +1,8 @@
-# airbench94_spectral.py
+"""
+airbench94_spectral.py
+Runs in 2.73 seconds on a 400W NVIDIA A100
+Attains 94.05 mean accuracy (n=400 trials)
+"""
 
 #############################################
 #            Setup/Hyperparameters          #
