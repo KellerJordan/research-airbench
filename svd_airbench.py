@@ -36,10 +36,14 @@ Now some optimizer hyperparam experiments:
 * lr=0.16 momentum=0.50 nesterov=True -> 94.13(n=16)
 * lr=0.175 momentum=0.50 nesterov=True -> 94.12(n=16)
 * lr=0.18 momentum=0.50 nesterov=True -> 94.14(n=48)
-* lr=0.20 momentum=0.50 nesterov=True -> 94.14(n=32)
+* lr=0.20 momentum=0.50 nesterov=True -> 94.13(n=64)
 ----
 * lr=0.12 momentum=0.60 nesterov=False -> 94.11(n=8)
 * lr=0.15 momentum=0.60 nesterov=False -> 93.99(n=8)
+
+New defaults: lr=0.15 momentum=0.60 nesterov=True
+
+
 
 """
 
@@ -63,7 +67,7 @@ hyp = {
         'epochs': 8,
         'batch_size': 1000,
         'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
-        'filter_lr': 0.20,      # the spectral norm of the rotation matrix added each step
+        #'filter_lr': 0.20,      # the spectral norm of the rotation matrix added each step
         'momentum': 0.85,
         'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
         'bias_scaler': 64.0,    # scales up learning rate (but not weight decay) for BatchNorm biases
@@ -303,7 +307,7 @@ def train(train_loader):
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
     other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
-    optimizer1 = RenormSGD(filter_params, lr=hyp['opt']['filter_lr'])
+    optimizer1 = RenormSGD(filter_params, lr=0.15, momentum=0.6, nesterov=True)
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
