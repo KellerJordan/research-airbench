@@ -483,27 +483,39 @@ def main(run, model_trainbias, model_freezebias):
     reinit_net(model_trainbias)
     current_steps = 0
 
-    filter_params = [p for p in model_trainbias.parameters() if len(p.shape) == 4 and p.requires_grad]
-    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
-
+    # Create optimizers for train whiten bias stage
     model = model_trainbias
-    norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
-    other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
+    filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
+    norm_biases = [p for n, p in model.named_parameters() if 'norm' in n and p.requires_grad]
+    whiten_bias = model._orig_mod[0].bias
+    fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
-                     dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    optimizer2_trainbias = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
+                     dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer3 = torch.optim.SGD([whiten_bias], lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer1_trainbias = optimizer1
+    optimizer2_trainbias = optimizer2
+    optimizer3_trainbias = optimizer3
+    # Create optimizers for frozen whiten bias stage
     model = model_freezebias
-    norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
-    other_params = [p for n, p in model[3:].named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
+    filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
+    norm_biases = [p for n, p in model.named_parameters() if 'norm' in n and p.requires_grad]
+    fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
-                     dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    optimizer2_freezebias = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
-
+                     dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer1_freezebias = optimizer1
+    optimizer2_freezebias = optimizer2
+    # Mkae learning rate schedulers for all 5 optimizers
     def get_lr(step):
         return 1 - step / total_train_steps
-    scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
-    scheduler2_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer2_freezebias, get_lr)
+    scheduler1_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer1_trainbias, get_lr)
     scheduler2_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer2_trainbias, get_lr)
+    scheduler3_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer3_trainbias, get_lr)
+    scheduler1_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer1_freezebias, get_lr)
+    scheduler2_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer2_freezebias, get_lr)
 
     # For accurately timing GPU code
     starter = torch.cuda.Event(enable_timing=True)
@@ -523,15 +535,18 @@ def main(run, model_trainbias, model_freezebias):
         # After training the whiten bias for some epochs, swap in the compiled model with frozen bias
         if epoch == 0:
             model = model_trainbias
-            optimizer2 = optimizer2_trainbias
-            scheduler2 = scheduler2_trainbias
+            optimizers = [optimizer1_trainbias, optimizer2_trainbias, optimizer3_trainbias]
+            schedulers = [scheduler1_trainbias, scheduler2_trainbias, scheduler3_trainbias]
         elif epoch == hyp['opt']['whiten_bias_epochs']:
             model = model_freezebias
-            optimizer2 = optimizer2_freezebias
-            scheduler2 = scheduler2_freezebias
+            old_optimizers = optimizers
+            old_schedulers = schedulers
+            optimizers = [optimizer1_trainbias, optimizer2_trainbias]
+            schedulers = [scheduler1_trainbias, scheduler2_trainbias]
             model.load_state_dict(model_trainbias.state_dict())
-            optimizer2.load_state_dict(optimizer2_trainbias.state_dict())
-            scheduler2.load_state_dict(scheduler2_trainbias.state_dict())
+            for i, (opt, sched) in zip(optimizers, schedulers):
+                opt.load_state_dict(old_optimizers[i].state_dict())
+                sched.load_state_dict(old_schedulers[i].state_dict())
 
         ####################
         #     Training     #
