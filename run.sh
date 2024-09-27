@@ -10,4 +10,5 @@ CUDA_VISIBLE_DEVICES=5 python $p &
 CUDA_VISIBLE_DEVICES=6 python $p &
 CUDA_VISIBLE_DEVICES=7 python $p &
 wait
+python show.py
 
