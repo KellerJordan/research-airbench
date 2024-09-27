@@ -53,6 +53,52 @@ hyp = {
     },
 }
 
+""" Computing zeroth matrix powers via Lakic 1998.
+paper: "On the Computation of the Matrix k-th Root"
+Suppose we have a matrix G = USV^T and we want to compute
+G^0 defined via G^0 = UV^T. We might want to do this to run
+"stochastic spectral descent" of Carlson et al 2015. The
+naive way to do this is via the SVD. But we can also just do
+(GG^T)^(-1/2) G or alternatively G (G^TG)^(-1/2) and apply
+the iterative method from Lakic 1998.
+In particular, we implement the first special case of Alg 1
+in that paper.
+https://gist.github.com/jxbz/fe235ee1c72b8b41ccd0d02b43378cf2
+https://x.com/jxbz/status/1821610280708948103
+"""
+
+import torch
+
+@torch.compile
+def zeroth_power_via_newton(G, steps=10):
+    device = G.device
+    d1, d2 = G.shape
+    d = min(d1, d2)
+
+    # store the smaller of the squares as S
+    S = G @ G.T if d1 < d2 else G.T @ G
+    S_norm = torch.linalg.matrix_norm(S, ord='fro') # there is freedom here. See Lakic (1998) Thm 2.3
+    S /= S_norm
+
+    # Now let's set up the state for the Lakic (1998) method
+    N = S
+    X = torch.eye(d).to(device).to(G.dtype)
+    I = torch.eye(d).to(device).to(G.dtype)
+
+    # Now let's run the iteration
+    for _ in range(steps):
+        U = (3 * I - N) / 2
+        X = X @ U
+        N = N @ U @ U
+
+    # X should now store either (G G^T)^(-1/2) or (G^T G)^(-1/2)
+    return X @ G / S_norm.sqrt() if d1 < d2 else G @ X / S_norm.sqrt()
+
+def zeroth_power_via_svd(G):
+    U, S, V = G.svd()
+    return U @ V.T
+
+
 #############################################
 #          Renormalized Optimizer           #
 #############################################
@@ -135,10 +181,10 @@ def renorm_sgd(params: List[Tensor],
         #filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
         #update = d_p / filter_grad_norms.view(*shape)
         # whiten the gradient
-        U, S, V = d_p.reshape(len(d_p), -1).float().svd()
-        new_S = torch.ones_like(S)
-        #new_S[len(S)//2:] = S[len(S)//2:] / S[len(S)//2] # This doesn't seem to harm accuracy
-        update = (U @ new_S.diag() @ V.T).to(param.dtype).view(param.shape)
+        g = d_p.reshape(len(d_p), -1).float()
+        #g = d_p.reshape(len(d_p), -1)
+        #update = zeroth_power_via_svd(g).to(param.dtype).view(param.shape)
+        update = zeroth_power_via_newton(g).to(param.dtype).view(param.shape)
         # take a step using the normalized gradients
         param.data.add_(update, alpha=-lr)
 
@@ -305,7 +351,7 @@ if __name__ == '__main__':
     test_loader = CifarLoader('/tmp/cifar10', train=False)
 
     #print(evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']))
-    accs = torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(3)])
+    accs = torch.tensor([evaluate(train(train_loader), test_loader, tta_level=hyp['net']['tta_level']) for _ in range(20)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
     import os
     import uuid
