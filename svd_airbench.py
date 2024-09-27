@@ -62,22 +62,22 @@ from torch import Tensor
 from torch.optim.optimizer import Optimizer
 from typing import List, Optional
 
-""" Computing zeroth matrix powers via Lakic 1998.
-paper: "On the Computation of the Matrix k-th Root"
-Suppose we have a matrix G = USV^T and we want to compute
-G^0 defined via G^0 = UV^T. We might want to do this to run
-"stochastic spectral descent" of Carlson et al 2015. The
-naive way to do this is via the SVD. But we can also just do
-(GG^T)^(-1/2) G or alternatively G (G^TG)^(-1/2) and apply
-the iterative method from Lakic 1998.
-In particular, we implement the first special case of Alg 1
-in that paper.
-https://gist.github.com/jxbz/fe235ee1c72b8b41ccd0d02b43378cf2
-https://x.com/jxbz/status/1821610280708948103
-"""
-
 @torch.compile
 def zeroth_power_via_newton(G, steps=10):
+    """
+    Computing zeroth matrix powers via Lakic 1998.
+    paper: "On the Computation of the Matrix k-th Root"
+    Suppose we have a matrix G = USV^T and we want to compute G^0 defined via G^0 = UV^T.
+    We might want to do this to run "stochastic spectral descent" of Carlson et al 2015.
+    The naive way to do this is via the SVD. But we can also just do (GG^T)^(-1/2) G or
+    alternatively G (G^TG)^(-1/2) and apply the iterative method from Lakic 1998.
+    In particular, we implement the first special case of Alg 1 in that paper.
+
+    Code taken from: https://gist.github.com/jxbz/fe235ee1c72b8b41ccd0d02b43378cf2
+    https://x.com/jxbz/status/1821610280708948103
+    Modifications: To speed things up, I am running this in bfloat16 using torch.compile.
+    """
+
     d1, d2 = G.shape
     d = min(d1, d2)
     I = torch.eye(d).to(G.device).to(G.dtype)
