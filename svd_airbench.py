@@ -181,7 +181,7 @@ def renorm_sgd(params: List[Tensor],
         #filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
         #update = d_p / filter_grad_norms.view(*shape)
         # whiten the gradient
-        g = d_p.reshape(len(d_p), -1).float()
+        g = d_p.reshape(len(d_p), -1).bfloat16()
         #g = d_p.reshape(len(d_p), -1)
         #update = zeroth_power_via_svd(g).to(param.dtype).view(param.shape)
         update = zeroth_power_via_newton(g).to(param.dtype).view(param.shape)
