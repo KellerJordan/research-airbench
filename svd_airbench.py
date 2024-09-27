@@ -43,15 +43,19 @@ Now some optimizer hyperparam experiments:
 
 New defaults: lr=0.15 momentum=0.60 nesterov=True
 (* Epochs=8 -> 94.15(n=72))
-* Epochs=7 -> 93.95(n=40)
+* Epochs=7 -> 93.95(n=160)
+* Epochs=10 -> 94.35(n=8)
+* Epochs=20 -> 94.64(n=8)
+* Epochs=30 -> 94.78(n=8)
+* Epochs=40 -> 94.71(n=8)
 
-New defaults: that with epochs=7 (-> 93.95(n=40))
+New defaults: that with epochs=7 (-> 93.95(n=160))
 * Always add 0.1 to learning rate in scheduler (so peak is 1.1x and bottom is 0.1x) -> 93.50(n=40)
 * Replace the second half of singular values with zero -> 93.57(n=8)
-* Replace the second half of singular values with themselves divided by the median singular value, rather than with 1.0 -> 93.96(n=16)
+* Replace the second half of singular values with themselves divided by the median singular value, rather than with 1.0 -> 93.97(n=128)
 * Replace the last 25% of singular values with themselves divided by the 75%ile value, rather than with 1.0 -> 93.99(n=16)
 * Replace the last 75% of singular values with themselves divided by the 25%ile value, rather than with 1.0 -> 93.82(n=16)
-* Replace the last 75% of singular values with themselves divided by the 25%ile value, rather than with 1.0; and then sqrt the last 75% -> 
+* Replace the last 75% of singular values with themselves divided by the 25%ile value, rather than with 1.0; and then sqrt the last 75% -> 93.95(n=16)
 
 
 
