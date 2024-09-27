@@ -53,6 +53,15 @@ hyp = {
     },
 }
 
+#############################################
+#           Zero-Power Optimizer            #
+#############################################
+
+import torch
+from torch import Tensor
+from torch.optim.optimizer import Optimizer
+from typing import List, Optional
+
 """ Computing zeroth matrix powers via Lakic 1998.
 paper: "On the Computation of the Matrix k-th Root"
 Suppose we have a matrix G = USV^T and we want to compute
@@ -67,13 +76,11 @@ https://gist.github.com/jxbz/fe235ee1c72b8b41ccd0d02b43378cf2
 https://x.com/jxbz/status/1821610280708948103
 """
 
-import torch
-
 @torch.compile
 def zeroth_power_via_newton(G, steps=10):
-    device = G.device
     d1, d2 = G.shape
     d = min(d1, d2)
+    I = torch.eye(d).to(G.device).to(G.dtype)
 
     # store the smaller of the squares as S
     S = G @ G.T if d1 < d2 else G.T @ G
@@ -82,8 +89,7 @@ def zeroth_power_via_newton(G, steps=10):
 
     # Now let's set up the state for the Lakic (1998) method
     N = S
-    X = torch.eye(d).to(device).to(G.dtype)
-    I = torch.eye(d).to(device).to(G.dtype)
+    X = torch.eye(d).to(G.device).to(G.dtype)
 
     # Now let's run the iteration
     for _ in range(steps):
@@ -94,21 +100,11 @@ def zeroth_power_via_newton(G, steps=10):
     # X should now store either (G G^T)^(-1/2) or (G^T G)^(-1/2)
     return X @ G / S_norm.sqrt() if d1 < d2 else G @ X / S_norm.sqrt()
 
-def zeroth_power_via_svd(G):
-    U, S, V = G.svd()
-    return U @ V.T
+#def zeroth_power_via_svd(G):
+#    U, S, V = G.svd()
+#    return U @ V.T
 
-
-#############################################
-#          Renormalized Optimizer           #
-#############################################
-
-import torch
-from torch import Tensor
-from torch.optim.optimizer import Optimizer
-from typing import List, Optional
-
-class RenormSGD(Optimizer):
+class ZeroPowerSGD(Optimizer):
     def __init__(self, params, lr=1e-3, momentum=0, dampening=0, nesterov=False):
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -131,7 +127,7 @@ class RenormSGD(Optimizer):
             d_p_list = [p.grad for p in params_with_grad]
             momentum_buffer_list = [self.state[p].get('momentum_buffer') for p in params_with_grad]
 
-            renorm_sgd(params_with_grad,
+            zeropower_sgd(params_with_grad,
                        d_p_list,
                        momentum_buffer_list,
                        momentum=group['momentum'],
@@ -145,7 +141,7 @@ class RenormSGD(Optimizer):
 
         return loss
 
-def renorm_sgd(params: List[Tensor],
+def zeropower_sgd(params: List[Tensor],
                d_p_list: List[Tensor],
                momentum_buffer_list: List[Optional[Tensor]],
                *,
@@ -171,19 +167,11 @@ def renorm_sgd(params: List[Tensor],
             else:
                 d_p = buf
 
-        shape = [len(param)]+[1]*(len(param.shape)-1)
-        # normalize each filter
-        #filter_data_norms = param.data.reshape(len(param), -1).norm(dim=1)
-        #param.data.div_(filter_data_norms.view(*shape))
+        # normalize the weight
         scale = param.data.norm() / len(param.data)**0.5
         param.data.div_(scale)
-        ## normalize each filter gradient
-        #filter_grad_norms = d_p.reshape(len(d_p), -1).norm(dim=1)
-        #update = d_p / filter_grad_norms.view(*shape)
         # whiten the gradient
         g = d_p.reshape(len(d_p), -1).bfloat16()
-        #g = d_p.reshape(len(d_p), -1)
-        #update = zeroth_power_via_svd(g).to(param.dtype).view(param.shape)
         update = zeroth_power_via_newton(g).to(param.dtype).view(param.shape)
         # take a step using the normalized gradients
         param.data.add_(update, alpha=-lr)
@@ -317,7 +305,7 @@ def train(train_loader):
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
     other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
-    optimizer1 = RenormSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
