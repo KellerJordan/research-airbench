@@ -1,4 +1,4 @@
-# new_record.py
+# airbench94_spectral.py
 
 #############################################
 #            Setup/Hyperparameters          #
@@ -176,9 +176,8 @@ def zeropower_sgd(params: List[Tensor],
         # whiten the gradient
         g = d_p.reshape(len(d_p), -1).bfloat16()
         update = zeroth_power_via_newton(g).to(param.dtype).view(param.shape)
-        # take a step using the normalized gradients
+        # take a step
         param.data.add_(update, alpha=-lr)
-
 
 #############################################
 #                DataLoader                 #
@@ -616,7 +615,7 @@ if __name__ == "__main__":
 
     print_columns(logging_columns_list, is_head=True)
     main('warmup', model_trainbias, model_freezebias)
-    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in range(25)])
+    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in range(400)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
     log = {'code': code, 'accs': accs}
