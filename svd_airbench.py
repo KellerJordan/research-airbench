@@ -76,28 +76,39 @@ Batch size experiments:
 * Bs=2000 lr=0.30 momentum=0.4 -> 94.70(n=16)
 
 * Bs=2000 lr=0.24 Epochs=8 -> 93.94(n=8)
+* Bs=2000 lr=0.24 Epochs=8 bias_lr=5.0 -> 93.98(n=40)
+* Bs=2000 lr=0.24 Epochs=8 bias_lr=6.5 -> 94.04(n=40)
+* Bs=2000 lr=0.20 Epochs=8 bias_lr=6.5 -> 94.01(n=40)
 
 * Bs=2500 lr=0.24 Epochs=8 -> 93.83(n=8)
-* Bs=2500 lr=0.24 Epochs=8 bias_lr=5.0 -> 93.96(n=16) [Reducing the bias lr is very important at large batch size!]
-* Bs=2500 lr=0.24 Epochs=4 bias_lr=5.0 -> 91.61(n=16)
+* Bs=2500 lr=0.24 Epochs=8 bias_lr=5.0 -> 93.94(n=40) [Reducing the bias lr becomes very important at large batch size!]
+* Bs=2500 lr=0.24 Epochs=8 bias_lr=6.0 -> 93.91(n=40)
+* Bs=2500 lr=0.24 Epochs=8 bias_lr=6.0 momentum=0.70 -> 93.87(n=40)
+* Bs=2500 lr=0.24 Epochs=8 bias_lr=5.0 wd=0.010 -> 93.96(n=40)
 
-* Bs=5000 lr=0.24 Epochs=8 -> 89.25(n=8)
-* Bs=5000 lr=0.30 Epochs=8 -> 89.56(n=8)
-* Bs=5000 lr=0.24 Epochs=8 bias_lr=2.5 -> 92.82(n=8)
 * Bs=5000 lr=0.24 Epochs=12 bias_lr=2.5 -> 93.94(n=48)
 * Bs=5000 lr=0.30 Epochs=12 bias_lr=2.5 -> 93.98(n=64)
-* Bs=5000 lr=0.30 Epochs=12 bias_lr=4.0 -> 94.03(n=64)
+* Bs=5000 lr=0.30 Epochs=12 bias_lr=4.0 -> 94.04(n=88)
 
-* Bs=10000 lr=0.30 Epochs=12 bias_lr=2.0 -> 91.29(n=32)
-* Bs=10000 lr=0.30 Epochs=18 bias_lr=2.0 -> 93.67(n=32)
 * Bs=10000 lr=0.30 Epochs=24 bias_lr=2.0 -> 94.12(n=32)
+* Bs=10000 lr=0.30 Epochs=18 bias_lr=2.0 -> 93.67(n=32)
 * Bs=10000 lr=0.24 Epochs=18 bias_lr=2.0 -> 93.50(n=32)
 * Bs=10000 lr=0.40 Epochs=18 bias_lr=2.0 -> 93.42(n=32)
 * Bs=10000 lr=0.30 Epochs=18 bias_lr=3.0 -> 93.52(n=24)
 * Bs=10000 lr=0.30 Epochs=18 bias_lr=2.0 momentum=0.40 -> 93.42(n=24)
 * Bs=10000 lr=0.30 Epochs=20 bias_lr=2.0 -> 93.84(n=24)
-* Bs=10000 lr=0.30 Epochs=22 bias_lr=2.0 -> 94.05(n=24)
+* Bs=10000 lr=0.30 Epochs=22 bias_lr=2.0 -> 94.05(n=24) [wow!]
 * Bs=10000 lr=0.30 Epochs=22 bias_lr=2.0 bias_scaler=16.0 -> 93.88(n=24)
+* Bs=12500 lr=0.30 Epochs=27 bias_lr=1.6 -> 94.00(n=24)
+* Bs=12500 lr=0.30 Epochs=25 bias_lr=1.6 -> 93.80(n=24)
+
+It is evident that going from bs=10000 to bs=12500 does not improve
+the quality of each step. We still need the same number of steps to reach 94.
+With either one, we can reach 94 in about 110 steps.
+And with bs=5000, similarly we can reach 94 in 12 epochs (120 steps).
+This is dramatically better than what can be obtained with a more first order optimizer.
+
+New defaults: bs=2000 lr=0.24 epochs=8 bias_lr=6.5 momentum=0.6 nesterov=True
 
 """
 
@@ -118,9 +129,9 @@ torch.backends.cudnn.benchmark = True
 w = 1.0
 hyp = {
     'opt': {
-        'epochs': 7,
-        'batch_size': 1000,
-        'lr': 10.0,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
+        'epochs': 8,
+        'batch_size': 2000,
+        'lr': 6.5,             # learning rate per 1024 examples -- 5.0 is optimal with no smoothing, 10.0 with smoothing.
         #'filter_lr': 0.20,      # the spectral norm of the rotation matrix added each step
         'momentum': 0.85,
         'weight_decay': 0.015,  # weight decay per 1024 examples (decoupled from learning rate)
@@ -361,7 +372,7 @@ def train(train_loader):
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' in n]
     other_params = [p for n, p in model.named_parameters() if len(p.shape) < 4 and p.requires_grad and 'norm' not in n]
-    optimizer1 = RenormSGD(filter_params, lr=0.15, momentum=0.6, nesterov=True)
+    optimizer1 = RenormSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
