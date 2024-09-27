@@ -544,7 +544,7 @@ def main(run, model_trainbias, model_freezebias):
             optimizers = [optimizer1_trainbias, optimizer2_trainbias]
             schedulers = [scheduler1_trainbias, scheduler2_trainbias]
             model.load_state_dict(model_trainbias.state_dict())
-            for i, (opt, sched) in zip(optimizers, schedulers):
+            for i, (opt, sched) in enumerate(zip(optimizers, schedulers)):
                 opt.load_state_dict(old_optimizers[i].state_dict())
                 sched.load_state_dict(old_schedulers[i].state_dict())
 
