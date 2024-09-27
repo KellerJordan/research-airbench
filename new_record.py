@@ -560,10 +560,9 @@ def main(run, model_trainbias, model_freezebias):
             loss = loss_fn(outputs, labels).sum()
             model.zero_grad(set_to_none=True)
             loss.backward()
-            optimizer1.step()
-            optimizer2.step()
-            scheduler1.step()
-            scheduler2.step()
+            for opt, sched in zip(optimizers, schedulers):
+                opt.step()
+                sched.step()
             current_steps += 1
             if current_steps >= total_train_steps:
                 break
