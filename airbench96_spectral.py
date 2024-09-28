@@ -23,7 +23,7 @@ torch.backends.cudnn.benchmark = True
 
 hyp = {
     'opt': {
-        'train_epochs': 37.0,
+        'train_epochs': 30.0,
         'batch_size': 1024,
         'lr': 9.0,               # learning rate per 1024 examples
         'momentum': 0.85,
@@ -589,8 +589,8 @@ def main(run, hyp, model_trainbias, model_freezebias):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    #optimizer1 = ZeroPowerSGD(filter_params, lr=0.20, momentum=0.6, nesterov=True)
-    optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.13, momentum=0.6, nesterov=True)
+    #optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer3 = torch.optim.SGD([whiten_bias], lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer1_trainbias = optimizer1
@@ -603,8 +603,8 @@ def main(run, hyp, model_trainbias, model_freezebias):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    #optimizer1 = ZeroPowerSGD(filter_params, lr=0.20, momentum=0.6, nesterov=True)
-    optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.13, momentum=0.6, nesterov=True)
+    #optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer1_freezebias = optimizer1
     optimizer2_freezebias = optimizer2
@@ -712,7 +712,7 @@ if __name__ == "__main__":
 
     print_columns(logging_columns_list, is_head=True)
     accs = torch.tensor([main(run, hyp, model_trainbias, model_freezebias)
-                         for run in range(10)])
+                         for run in range(20)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
     log = {'code': code, 'accs': accs}
