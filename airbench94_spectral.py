@@ -99,10 +99,11 @@ def zeroth_power_via_newton(G, steps=10):
     X = torch.eye(d).to(G.device).to(G.dtype)
 
     # Now let's run the iteration
-    for _ in range(steps):
+    for i in range(steps):
         U = (3 * I - N) / 2
         X = X @ U
-        N = N @ U @ U
+        if i < steps-1: # suggested by @EitanTurok https://x.com/EitanTurok/status/1839754807696855333
+            N = N @ U @ U
 
     # X should now store either (G G^T)^(-1/2) or (G^T G)^(-1/2)
     return X @ G / S_norm.sqrt() if d1 < d2 else G @ X / S_norm.sqrt()
