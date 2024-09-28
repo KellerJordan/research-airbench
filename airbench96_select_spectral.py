@@ -24,8 +24,8 @@ torch.backends.cudnn.benchmark = True
 hyp = {
     'opt': {
         'train_epochs': 45.0,
-        'batch_size': 1000,
-        'batch_size_masked': 512,
+        'batch_size': 2048,
+        'batch_size_masked': 1024,
         'lr': 9.0,               # learning rate per 1024 examples
         'momentum': 0.85,
         'weight_decay': 0.012,   # weight decay per 1024 examples (decoupled from learning rate)
@@ -528,20 +528,6 @@ def init_whitening_conv(layer, train_set, eps=5e-4):
     layer.weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
 
 ############################################
-#                Lookahead                 #
-############################################
-
-class LookaheadState:
-    def __init__(self, net):
-        self.net_ema = {k: v.clone() for k, v in net.state_dict().items()}
-
-    def update(self, net, decay):
-        for ema_param, net_param in zip(self.net_ema.values(), net.state_dict().values()):
-            if net_param.dtype in (torch.half, torch.float):
-                ema_param.lerp_(net_param, 1-decay)
-                net_param.copy_(ema_param)
-
-############################################
 #                 Logging                  #
 ############################################
 
@@ -690,7 +676,7 @@ def main(run, hyp, model_proxy, model_trainbias, model_freezebias):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = ZeroPowerSGD(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.20, momentum=0.6, nesterov=True)
     #optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer3 = torch.optim.SGD([whiten_bias], lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
@@ -704,7 +690,7 @@ def main(run, hyp, model_proxy, model_trainbias, model_freezebias):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = ZeroPowerSGD(filter_params, lr=0.12, momentum=0.6, nesterov=True)
+    optimizer1 = ZeroPowerSGD(filter_params, lr=0.20, momentum=0.6, nesterov=True)
     #optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer1_freezebias = optimizer1
