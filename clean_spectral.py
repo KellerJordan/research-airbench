@@ -54,13 +54,11 @@ class SpectralSGDM(torch.optim.Optimizer):
                 if g is None:
                     continue
                 state = self.state[p]
-
-                if momentum != 0:
-                    if 'momentum_buffer' not in state.keys():
-                        state['momentum_buffer'] = torch.zeros_like(g)
-                    buf = state['momentum_buffer']
-                    buf.mul_(momentum).add_(g)
-                    g = g.add(buf, alpha=momentum) # Nesterov momentum
+                if 'momentum_buffer' not in state.keys():
+                    state['momentum_buffer'] = torch.zeros_like(g)
+                buf = state['momentum_buffer']
+                buf.mul_(momentum).add_(g)
+                g = g.add(buf, alpha=momentum) # Nesterov momentum
 
                 p.data.mul_(len(p.data)**0.5 / p.data.norm()) # normalize the weight
                 update = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape) # whiten the update
