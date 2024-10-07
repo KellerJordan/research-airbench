@@ -9,8 +9,21 @@ torch.backends.cudnn.benchmark = True
 #           Spectral SGD-momentum           #
 #############################################
 
-@torch.compile
-def zeroth_power_via_newton(G, steps=9):
+def spectral_norm(G, steps=25, eps=1e-7):
+    if len(G.shape) == 4:
+        G = G.reshape(len(G), -1)
+    G_norm = G.norm()
+    X = G.bfloat16() / G_norm
+    if G.size(0) > G.size(1):
+        X = X.T
+    M = X @ X.T
+    v = torch.randn(X.size(0), device=X.device, dtype=X.dtype)
+    for _ in range(steps):
+        v = M @ (v / v.norm())
+    return G_norm * v.norm()**0.5
+
+#@torch.compile
+def zeroth_power_via_newton(G, steps=15):
 
     orig_dtype = G.dtype
     G = G.bfloat16()
@@ -21,7 +34,8 @@ def zeroth_power_via_newton(G, steps=9):
 
     # store the smaller of the squares as S
     S = G @ G.T if d1 < d2 else G.T @ G
-    S_norm = torch.linalg.matrix_norm(S, ord='fro') # there is freedom here. See Lakic (1998) Thm 2.3
+    #S_norm = torch.linalg.matrix_norm(S, ord='fro') # there is freedom here. See Lakic (1998) Thm 2.3
+    S_norm = spectral_norm(S)
     S /= S_norm
 
     # Now let's set up the state for the Lakic (1998) method
@@ -40,11 +54,14 @@ def zeroth_power_via_newton(G, steps=9):
     O = X @ G if d1 < d2 else G @ X
     return O.to(orig_dtype)
 
-@torch.compile
+#@torch.compile
 def zeroth_power_via_newtonschulz5(G, steps=9, eps=1e-7):
     assert len(G.shape) == 2
-    a, b, c = (3.4445, -4.7750,  2.0315)
-    X = G.bfloat16() / (G.norm() + eps) # ensure top singular value <= 1
+    #a, b, c = (3.4445, -4.7750,  2.0315)
+    a, b, c = (3.1866, -4.4189,  2.1207)
+    #a, b, c = (2.613, -3.2274, 1.6137)
+    X = 0.9 * G.bfloat16() / (spectral_norm(G) + eps) # ensure top singular value <= 1
+    #X = G.bfloat16() / (G.norm() + eps) # ensure top singular value <= 1
     if G.size(0) > G.size(1):
         X = X.T
     for _ in range(steps):
@@ -73,17 +90,15 @@ class SpectralSGDM(torch.optim.Optimizer):
                     state['momentum_buffer'] = torch.zeros_like(g)
                 buf = state['momentum_buffer']
 
+                ortho = zeroth_power_via_newtonschulz5
+                #ortho = zeroth_power_via_newton
+
                 ### Post-orthogonalize
                 buf.mul_(momentum).add_(g)
                 g = g.add(buf, alpha=momentum) # Nesterov momentum
-                g = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape)
+                g = ortho(g.reshape(len(g), -1), steps=9).view(g.shape)
 
-                ### Pre-orthogonalize
-                #g = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape)
-                #buf.mul_(momentum).add_(g)
-                #g = g.add(buf, alpha=momentum) # Nesterov momentum
-                #g.mul_(len(p.data)**0.5 / g.norm()) # normalize gradient
-
+                #g /= spectral_norm(g)
                 ## Normalize and upate the weight
                 p.data.mul_(len(p.data)**0.5 / p.data.norm())
                 p.data.add_(g, alpha=-lr)
@@ -253,7 +268,7 @@ def main(run, model):
 
 
 model = make_net()
-model = torch.compile(model, mode='max-autotune')
-accs = torch.tensor([main(run, model) for run in tqdm(range(30))])
+#model = torch.compile(model, mode='max-autotune')
+accs = torch.tensor([main(run, model) for run in tqdm(range(10))])
 print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
