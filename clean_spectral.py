@@ -28,20 +28,6 @@ hyp = {
         'label_smoothing': 0.2,
         'whiten_bias_epochs': 3,    # how many epochs to train the whitening layer bias before freezing
     },
-    'aug': {
-        'flip': True,
-        'translate': 2,
-    },
-    'net': {
-        'widths': {
-            'block1': 64,
-            'block2': 256,
-            'block3': 256,
-        },
-        'batchnorm_momentum': 0.6,
-        'scaling_factor': 1/9,
-        'tta_level': 2,         # the level of test-time augmentation: 0=none, 1=mirror, 2=mirror+translate
-    },
 }
 
 #############################################
@@ -170,8 +156,8 @@ class ConvGroup(nn.Module):
 #############################################
 
 def make_net():
-    widths = hyp['net']['widths']
-    batchnorm_momentum = hyp['net']['batchnorm_momentum']
+    widths = dict(block1=64, block2=256, block3=256)
+    batchnorm_momentum = 0.6
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
     net = nn.Sequential(
@@ -183,7 +169,7 @@ def make_net():
         nn.MaxPool2d(3),
         Flatten(),
         nn.Linear(widths['block3'], 10, bias=False),
-        Mul(hyp['net']['scaling_factor']),
+        Mul(1/9),
     )
     net[0].weight.requires_grad = False
     net = net.half().cuda()
@@ -226,7 +212,7 @@ def init_whitening_conv(layer, train_set, eps=5e-4):
 def main(run, model_trainbias, model_freezebias):
 
     batch_size = hyp['opt']['batch_size']
-    epochs = hyp['opt']['train_epochs']
+    epochs = 8
     momentum = hyp['opt']['momentum']
     # Assuming gradients are constant in time, for Nesterov momentum, the below ratio is how much
     # larger the default steps will be than the underlying per-example gradients. We divide the
@@ -240,10 +226,7 @@ def main(run, model_trainbias, model_freezebias):
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
-    train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'])
-    if run == 'warmup':
-        # The only purpose of the first run is to warmup the compiled model, so we can use dummy data
-        train_loader.labels = torch.randint(0, 10, size=(len(train_loader.labels),), device=train_loader.labels.device)
+    train_loader = CifarLoader('cifar10', train=True, batch_size=2000, aug=dict(flip=True, translate=2))
     total_train_steps = ceil(len(train_loader) * epochs)
 
     # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
@@ -321,9 +304,7 @@ def main(run, model_trainbias, model_freezebias):
             if current_steps >= total_train_steps:
                 break
 
-    tta_val_acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
-
-    return tta_val_acc
+    return evaluate(model, test_loader, tta_level=2)
 
 if __name__ == "__main__":
 
@@ -333,8 +314,7 @@ if __name__ == "__main__":
     model_trainbias = torch.compile(model_trainbias, mode='max-autotune')
     model_freezebias = torch.compile(model_freezebias, mode='max-autotune')
 
-    main('warmup', model_trainbias, model_freezebias)
     from tqdm import tqdm
-    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in tqdm(range(20))])
+    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in tqdm(range(50))])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
