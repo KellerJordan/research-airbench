@@ -17,15 +17,6 @@ from airbench import CifarLoader, evaluate
 
 torch.backends.cudnn.benchmark = True
 
-hyp = {
-    'opt': {
-        'batch_size': 2000,
-        'lr': 6.5,                 # learning rate per 1024 examples
-        'momentum': 0.85,
-        'weight_decay': 0.015,     # weight decay per 1024 examples (decoupled from learning rate)
-    },
-}
-
 #############################################
 #           Spectral SGD-momentum           #
 #############################################
@@ -62,14 +53,8 @@ def zeroth_power_via_newton(G, steps=9):
     return O.to(orig_dtype)
 
 class SpectralSGDM(torch.optim.Optimizer):
-    def __init__(self, params, lr=1e-3, momentum=0, nesterov=False):
-        if lr < 0.0:
-            raise ValueError(f"Invalid learning rate: {lr}")
-        if momentum < 0.0:
-            raise ValueError(f"Invalid momentum value: {momentum}")
-        if nesterov and momentum <= 0:
-            raise ValueError("Nesterov momentum requires a momentum")
-        defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov)
+    def __init__(self, params, lr=1e-3, momentum=0):
+        defaults = dict(lr=lr, momentum=momentum)
         super().__init__(params, defaults)
 
     def step(self):
@@ -87,7 +72,7 @@ class SpectralSGDM(torch.optim.Optimizer):
                         state['momentum_buffer'] = torch.zeros_like(g)
                     buf = state['momentum_buffer']
                     buf.mul_(momentum).add_(g)
-                    g = g.add(buf, alpha=momentum) if group['nesterov'] else buf
+                    g = g.add(buf, alpha=momentum) # Nesterov momentum
 
                 p.data.mul_(len(p.data)**0.5 / p.data.norm()) # normalize the weight
                 update = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape) # whiten the update
@@ -198,9 +183,10 @@ def make_net():
     return net
 
 def reinit_net(model):
-    for m in model._orig_mod[1:].modules():
+    for m in model.modules():
         if type(m) in (Conv, BatchNorm, nn.Linear):
             m.reset_parameters()
+    model._orig_mod[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
 
 ############################################
 #                Training                  #
@@ -209,13 +195,9 @@ def reinit_net(model):
 def main(run, model):
 
     epochs = 8
-    batch_size = hyp['opt']['batch_size']
-    momentum = hyp['opt']['momentum']
-    kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
-    lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
-    wd = hyp['opt']['weight_decay'] * batch_size / kilostep_scale
+    lr = 1.655910/2000
+    wd = 0.003821
 
-    print('%3f, %3f' % (2000*lr, wd))
     lr_biases = lr * 64
     loss_fn = nn.CrossEntropyLoss(label_smoothing=0.2, reduction='none')
 
@@ -234,7 +216,7 @@ def main(run, model):
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer, whiten_bias], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6, nesterov=True)
+    optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6)
     optimizer2 = torch.optim.SGD(param_configs, momentum=0.85, nesterov=True)
     def get_lr(step):
         return 1 - step / total_train_steps
