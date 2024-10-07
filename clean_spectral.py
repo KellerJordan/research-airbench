@@ -72,6 +72,10 @@ def zeroth_power_via_newtonschulz5(G, steps=9, eps=1e-7):
         X = X.T
     return X.to(G.dtype)
 
+def zeroth_power_via_svd(G, steps=None):
+    U, S, V = G.float().svd()
+    return U @ S.diag() @ V.T
+
 class SpectralSGDM(torch.optim.Optimizer):
     def __init__(self, params, lr=1e-3, momentum=0):
         defaults = dict(lr=lr, momentum=momentum)
@@ -92,6 +96,7 @@ class SpectralSGDM(torch.optim.Optimizer):
 
                 ortho = zeroth_power_via_newtonschulz5
                 #ortho = zeroth_power_via_newton
+                #ortho = zeroth_power_via_svd
 
                 ### Post-orthogonalize
                 buf.mul_(momentum).add_(g)
