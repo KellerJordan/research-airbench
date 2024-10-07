@@ -250,22 +250,14 @@ def main(run, model_trainbias, model_freezebias):
     batch_size = hyp['opt']['batch_size']
     epochs = hyp['opt']['train_epochs']
     momentum = hyp['opt']['momentum']
-    # Assuming gradients are constant in time, for Nesterov momentum, the below ratio is how much
-    # larger the default steps will be than the underlying per-example gradients. We divide the
-    # learning rate by this ratio in order to ensure steps are the same scale as gradients, regardless
-    # of the choice of momentum.
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
     lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
     wd = hyp['opt']['weight_decay'] * batch_size / kilostep_scale
     lr_biases = lr * hyp['opt']['bias_scaler']
-
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
     train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'], altflip=True)
-    if run == 'warmup':
-        # The only purpose of the first run is to warmup the compiled model, so we can use dummy data
-        train_loader.labels = torch.randint(0, 10, size=(len(train_loader.labels),), device=train_loader.labels.device)
     total_train_steps = ceil(len(train_loader) * epochs)
 
     # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
@@ -287,26 +279,12 @@ def main(run, model_trainbias, model_freezebias):
     optimizer1_trainbias = optimizer1
     optimizer2_trainbias = optimizer2
     optimizer3_trainbias = optimizer3
-    # Create optimizers for frozen whiten bias stage
-    model = model_freezebias
-    filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
-    norm_biases = [p for n, p in model.named_parameters() if 'norm' in n and p.requires_grad]
-    fc_layer = model._orig_mod[-2].weight
-    param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
-                     dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6, nesterov=True)
-    #optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer1_freezebias = optimizer1
-    optimizer2_freezebias = optimizer2
     # Make learning rate schedulers for all 5 optimizers
     def get_lr(step):
         return 1 - step / total_train_steps
     scheduler1_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer1_trainbias, get_lr)
     scheduler2_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer2_trainbias, get_lr)
     scheduler3_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer3_trainbias, get_lr)
-    scheduler1_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer1_freezebias, get_lr)
-    scheduler2_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer2_freezebias, get_lr)
 
     # Initialize the whitening layer using training images
     train_images = train_loader.normalize(train_loader.images[:5000])
@@ -319,20 +297,6 @@ def main(run, model_trainbias, model_freezebias):
             model = model_trainbias
             optimizers = [optimizer1_trainbias, optimizer2_trainbias, optimizer3_trainbias]
             schedulers = [scheduler1_trainbias, scheduler2_trainbias, scheduler3_trainbias]
-        elif epoch == hyp['opt']['whiten_bias_epochs']:
-            model = model_freezebias
-            old_optimizers = optimizers
-            old_schedulers = schedulers
-            optimizers = [optimizer1_freezebias, optimizer2_freezebias]
-            schedulers = [scheduler1_freezebias, scheduler2_freezebias]
-            model.load_state_dict(model_trainbias.state_dict())
-            for i, (opt, sched) in enumerate(zip(optimizers, schedulers)):
-                opt.load_state_dict(old_optimizers[i].state_dict())
-                sched.load_state_dict(old_schedulers[i].state_dict())
-
-        ####################
-        #     Training     #
-        ####################
 
         model.train()
         for inputs, labels in train_loader:
@@ -352,17 +316,13 @@ def main(run, model_trainbias, model_freezebias):
     ####################
 
     tta_val_acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
-    epoch = 'eval'
     print(tta_val_acc)
-
     return tta_val_acc
 
 if __name__ == "__main__":
     model_trainbias = make_net()
-    model_freezebias = make_net()
-    model_freezebias[0].bias.requires_grad = False
+    model_freezebias = None
     model_trainbias = torch.compile(model_trainbias, mode='max-autotune')
-    model_freezebias = torch.compile(model_freezebias, mode='max-autotune')
-    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in range(50)])
+    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in range(20)])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
