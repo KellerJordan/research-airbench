@@ -40,6 +40,21 @@ def zeroth_power_via_newton(G, steps=9):
     O = X @ G if d1 < d2 else G @ X
     return O.to(orig_dtype)
 
+@torch.compile
+def zeroth_power_via_newtonschulz5(G, steps=9, eps=1e-7):
+    assert len(G.shape) == 2
+    a, b, c = (3.4445, -4.7750,  2.0315)
+    X = G.bfloat16() / (G.norm() + eps) # ensure top singular value <= 1
+    if G.size(0) > G.size(1):
+        X = X.T
+    for _ in range(steps):
+        A = X @ X.T
+        B = A @ X
+        X = a * X + b * B + c * A @ B
+    if G.size(0) > G.size(1):
+        X = X.T
+    return X.to(G.dtype)
+
 class SpectralSGDM(torch.optim.Optimizer):
     def __init__(self, params, lr=1e-3, momentum=0):
         defaults = dict(lr=lr, momentum=momentum)
@@ -62,6 +77,7 @@ class SpectralSGDM(torch.optim.Optimizer):
 
                 p.data.mul_(len(p.data)**0.5 / p.data.norm()) # normalize the weight
                 update = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape) # whiten the update
+                #update = zeroth_power_via_newtonschulz5(g.reshape(len(g), -1)).view(g.shape) # whiten the update
                 p.data.add_(update, alpha=-lr) # take a step
 
 #############################################
@@ -168,12 +184,6 @@ def make_net():
             mod.float()
     return net
 
-def reinit_net(model):
-    for m in model.modules():
-        if type(m) in (Conv, BatchNorm, nn.Linear):
-            m.reset_parameters()
-    model._orig_mod[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
-
 ############################################
 #                Training                  #
 ############################################
@@ -188,18 +198,24 @@ def main(run, model):
     loss_fn = nn.CrossEntropyLoss(label_smoothing=0.2, reduction='none')
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
-    train_loader = CifarLoader('cifar10', train=True, batch_size=2000, aug=dict(flip=True, translate=2), altflip=True)
+    train_loader = CifarLoader('cifar10', train=True, batch_size=2000,
+                               aug=dict(flip=True, translate=2), altflip=True)
     total_train_steps = ceil(len(train_loader) * epochs)
+    current_steps = 0
 
     # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
-    reinit_net(model)
+    raw_model = (model._orig_mod if hasattr(model, '_orig_mod') else model)
+    for m in model.modules():
+        if type(m) in (Conv, BatchNorm, nn.Linear):
+            m.reset_parameters()
+    model[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
     current_steps = 0
 
     # Create optimizers for train whiten bias stage
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if 'norm' in n and p.requires_grad]
-    whiten_bias = model._orig_mod[0].bias
-    fc_layer = model._orig_mod[-2].weight
+    whiten_bias = raw_model[0].bias
+    fc_layer = raw_model[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer, whiten_bias], lr=lr, weight_decay=wd/lr)]
     optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6)
@@ -224,10 +240,6 @@ def main(run, model):
             if current_steps >= total_train_steps:
                 break
 
-    ####################
-    #  TTA Evaluation  #
-    ####################
-
     tta_val_acc = evaluate(model, test_loader, tta_level=2)
     print(tta_val_acc)
     return tta_val_acc
@@ -235,6 +247,6 @@ def main(run, model):
 
 model = make_net()
 model = torch.compile(model, mode='max-autotune')
-accs = torch.tensor([main(run, model) for run in tqdm(range(20))])
+accs = torch.tensor([main(run, model) for run in tqdm(range(100))])
 print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
