@@ -24,23 +24,8 @@ hyp = {
         'lr': 6.5,                 # learning rate per 1024 examples
         'momentum': 0.85,
         'weight_decay': 0.015,     # weight decay per 1024 examples (decoupled from learning rate)
-        'bias_scaler': 64.0,        # scales up learning rate (but not weight decay) for BatchNorm biases
         'label_smoothing': 0.2,
         'whiten_bias_epochs': 3,    # how many epochs to train the whitening layer bias before freezing
-    },
-    'aug': {
-        'flip': True,
-        'translate': 2,
-    },
-    'net': {
-        'widths': {
-            'block1': 64,
-            'block2': 256,
-            'block3': 256,
-        },
-        'batchnorm_momentum': 0.6,
-        'scaling_factor': 1/9,
-        'tta_level': 2,         # the level of test-time augmentation: 0=none, 1=mirror, 2=mirror+translate
     },
 }
 
@@ -192,7 +177,7 @@ eigenvectors_scaled = torch.tensor([
 ]).reshape(12, 3, 2, 2)
 
 def make_net():
-    widths = hyp['net']['widths']
+    widths = dict(block1=64, block2=256, block3=256)
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
     net = nn.Sequential(
@@ -204,7 +189,7 @@ def make_net():
         nn.MaxPool2d(3),
         Flatten(),
         nn.Linear(widths['block3'], 10, bias=False),
-        Mul(hyp['net']['scaling_factor']),
+        Mul(1/9),
     )
     net[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
     net[0].weight.requires_grad = False
@@ -245,7 +230,7 @@ def init_whitening_conv(layer, train_set, eps=5e-4):
 #                Training                  #
 ############################################
 
-def main(run, model_trainbias, model_freezebias):
+def main(run, model):
 
     batch_size = hyp['opt']['batch_size']
     epochs = hyp['opt']['train_epochs']
@@ -253,19 +238,18 @@ def main(run, model_trainbias, model_freezebias):
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
     lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
     wd = hyp['opt']['weight_decay'] * batch_size / kilostep_scale
-    lr_biases = lr * hyp['opt']['bias_scaler']
+    lr_biases = lr * 64
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
-    train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'], altflip=True)
+    train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=dict(flip=True, translate=2), altflip=True)
     total_train_steps = ceil(len(train_loader) * epochs)
 
     # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
-    reinit_net(model_trainbias)
+    reinit_net(model)
     current_steps = 0
 
     # Create optimizers for train whiten bias stage
-    model = model_trainbias
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
     norm_biases = [p for n, p in model.named_parameters() if 'norm' in n and p.requires_grad]
     whiten_bias = model._orig_mod[0].bias
@@ -273,31 +257,21 @@ def main(run, model_trainbias, model_freezebias):
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
     optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6, nesterov=True)
-    #optimizer1 = torch.optim.SGD(filter_params, lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
     optimizer3 = torch.optim.SGD([whiten_bias], lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer1_trainbias = optimizer1
-    optimizer2_trainbias = optimizer2
-    optimizer3_trainbias = optimizer3
-    # Make learning rate schedulers for all 5 optimizers
     def get_lr(step):
         return 1 - step / total_train_steps
-    scheduler1_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer1_trainbias, get_lr)
-    scheduler2_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer2_trainbias, get_lr)
-    scheduler3_trainbias = torch.optim.lr_scheduler.LambdaLR(optimizer3_trainbias, get_lr)
+    scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
+    scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
+    scheduler3 = torch.optim.lr_scheduler.LambdaLR(optimizer3, get_lr)
+    optimizers = [optimizer1, optimizer2, optimizer3]
+    schedulers = [scheduler1, scheduler2, scheduler3]
 
     # Initialize the whitening layer using training images
     train_images = train_loader.normalize(train_loader.images[:5000])
-    init_whitening_conv(model_trainbias._orig_mod[0], train_images)
+    init_whitening_conv(model._orig_mod[0], train_images)
 
     for epoch in range(ceil(epochs)):
-
-        # After training the whiten bias for some epochs, swap in the compiled model with frozen bias
-        if epoch == 0:
-            model = model_trainbias
-            optimizers = [optimizer1_trainbias, optimizer2_trainbias, optimizer3_trainbias]
-            schedulers = [scheduler1_trainbias, scheduler2_trainbias, scheduler3_trainbias]
-
         model.train()
         for inputs, labels in train_loader:
             outputs = model(inputs)
@@ -315,14 +289,14 @@ def main(run, model_trainbias, model_freezebias):
     #  TTA Evaluation  #
     ####################
 
-    tta_val_acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
+    tta_val_acc = evaluate(model, test_loader, tta_level=2)
     print(tta_val_acc)
     return tta_val_acc
 
 if __name__ == "__main__":
-    model_trainbias = make_net()
-    model_freezebias = None
-    model_trainbias = torch.compile(model_trainbias, mode='max-autotune')
-    accs = torch.tensor([main(run, model_trainbias, model_freezebias) for run in range(20)])
+    model = make_net()
+    model = torch.compile(model, mode='max-autotune')
+    from tqdm import tqdm
+    accs = torch.tensor([main(run, model) for run in tqdm(range(20))])
     print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
