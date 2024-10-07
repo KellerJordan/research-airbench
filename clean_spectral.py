@@ -19,13 +19,10 @@ torch.backends.cudnn.benchmark = True
 
 hyp = {
     'opt': {
-        'train_epochs': 8,
         'batch_size': 2000,
         'lr': 6.5,                 # learning rate per 1024 examples
         'momentum': 0.85,
         'weight_decay': 0.015,     # weight decay per 1024 examples (decoupled from learning rate)
-        'label_smoothing': 0.2,
-        'whiten_bias_epochs': 3,    # how many epochs to train the whitening layer bias before freezing
     },
 }
 
@@ -112,7 +109,7 @@ class Mul(nn.Module):
         return x * self.scale
 
 class BatchNorm(nn.BatchNorm2d):
-    def __init__(self, num_features, momentum, eps=1e-12,
+    def __init__(self, num_features, momentum=0.6, eps=1e-12,
                  weight=False, bias=True):
         super().__init__(num_features, eps=eps, momentum=1-momentum)
         self.weight.requires_grad = weight
@@ -131,13 +128,13 @@ class Conv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
 
 class ConvGroup(nn.Module):
-    def __init__(self, channels_in, channels_out, batchnorm_momentum=0.6):
+    def __init__(self, channels_in, channels_out):
         super().__init__()
         self.conv1 = Conv(channels_in,  channels_out)
         self.pool = nn.MaxPool2d(2)
-        self.norm1 = BatchNorm(channels_out, batchnorm_momentum)
+        self.norm1 = BatchNorm(channels_out)
         self.conv2 = Conv(channels_out, channels_out)
-        self.norm2 = BatchNorm(channels_out, batchnorm_momentum)
+        self.norm2 = BatchNorm(channels_out)
         self.activ = nn.GELU()
 
     def forward(self, x):
@@ -232,17 +229,17 @@ def init_whitening_conv(layer, train_set, eps=5e-4):
 
 def main(run, model):
 
+    epochs = 8
     batch_size = hyp['opt']['batch_size']
-    epochs = hyp['opt']['train_epochs']
     momentum = hyp['opt']['momentum']
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
     lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
     wd = hyp['opt']['weight_decay'] * batch_size / kilostep_scale
     lr_biases = lr * 64
-    loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
+    loss_fn = nn.CrossEntropyLoss(label_smoothing=0.2, reduction='none')
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
-    train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=dict(flip=True, translate=2), altflip=True)
+    train_loader = CifarLoader('cifar10', train=True, batch_size=2000, aug=dict(flip=True, translate=2), altflip=True)
     total_train_steps = ceil(len(train_loader) * epochs)
 
     # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
@@ -255,17 +252,13 @@ def main(run, model):
     whiten_bias = model._orig_mod[0].bias
     fc_layer = model._orig_mod[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
-                     dict(params=[fc_layer], lr=lr, weight_decay=wd/lr)]
+                     dict(params=[fc_layer, whiten_bias], lr=lr, weight_decay=wd/lr)]
     optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6, nesterov=True)
-    optimizer2 = torch.optim.SGD(param_configs, momentum=hyp['opt']['momentum'], nesterov=True)
-    optimizer3 = torch.optim.SGD([whiten_bias], lr=lr, weight_decay=wd/lr, momentum=hyp['opt']['momentum'], nesterov=True)
+    optimizer2 = torch.optim.SGD(param_configs, momentum=0.85, nesterov=True)
     def get_lr(step):
         return 1 - step / total_train_steps
     scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
     scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
-    scheduler3 = torch.optim.lr_scheduler.LambdaLR(optimizer3, get_lr)
-    optimizers = [optimizer1, optimizer2, optimizer3]
-    schedulers = [scheduler1, scheduler2, scheduler3]
 
     # Initialize the whitening layer using training images
     train_images = train_loader.normalize(train_loader.images[:5000])
@@ -278,9 +271,10 @@ def main(run, model):
             loss = loss_fn(outputs, labels).sum()
             model.zero_grad(set_to_none=True)
             loss.backward()
-            for opt, sched in zip(optimizers, schedulers):
-                opt.step()
-                sched.step()
+            optimizer1.step()
+            optimizer2.step()
+            scheduler1.step()
+            scheduler2.step()
             current_steps += 1
             if current_steps >= total_train_steps:
                 break
