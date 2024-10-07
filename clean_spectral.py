@@ -202,27 +202,6 @@ def reinit_net(model):
         if type(m) in (Conv, BatchNorm, nn.Linear):
             m.reset_parameters()
 
-#############################################
-#       Whitening Conv Initialization       #
-#############################################
-
-def get_patches(x, patch_shape):
-    c, (h, w) = x.shape[1], patch_shape
-    return x.unfold(2,h,1).unfold(3,w,1).transpose(1,3).reshape(-1,c,h,w).float()
-
-def get_whitening_parameters(patches):
-    n,c,h,w = patches.shape
-    patches_flat = patches.view(n, -1)
-    est_patch_covariance = (patches_flat.T @ patches_flat) / n
-    eigenvalues, eigenvectors = torch.linalg.eigh(est_patch_covariance, UPLO='U')
-    return eigenvalues.flip(0).view(-1, 1, 1, 1), eigenvectors.T.reshape(c*h*w,c,h,w).flip(0)
-
-def init_whitening_conv(layer, train_set, eps=5e-4):
-    patches = get_patches(train_set, patch_shape=layer.weight.data.shape[2:])
-    eigenvalues, eigenvectors = get_whitening_parameters(patches)
-    eigenvectors_scaled = eigenvectors / torch.sqrt(eigenvalues + eps)
-    layer.weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
-
 ############################################
 #                Training                  #
 ############################################
@@ -235,6 +214,8 @@ def main(run, model):
     kilostep_scale = 1024 * (1 + 1 / (1 - momentum))
     lr = hyp['opt']['lr'] / kilostep_scale # un-decoupled learning rate for PyTorch SGD
     wd = hyp['opt']['weight_decay'] * batch_size / kilostep_scale
+
+    print('%3f, %3f' % (2000*lr, wd))
     lr_biases = lr * 64
     loss_fn = nn.CrossEntropyLoss(label_smoothing=0.2, reduction='none')
 
@@ -260,10 +241,6 @@ def main(run, model):
     scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
     scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
 
-    # Initialize the whitening layer using training images
-    train_images = train_loader.normalize(train_loader.images[:5000])
-    init_whitening_conv(model._orig_mod[0], train_images)
-
     for epoch in range(ceil(epochs)):
         model.train()
         for inputs, labels in train_loader:
@@ -287,10 +264,10 @@ def main(run, model):
     print(tta_val_acc)
     return tta_val_acc
 
-if __name__ == "__main__":
-    model = make_net()
-    model = torch.compile(model, mode='max-autotune')
-    from tqdm import tqdm
-    accs = torch.tensor([main(run, model) for run in tqdm(range(20))])
-    print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
+
+model = make_net()
+model = torch.compile(model, mode='max-autotune')
+from tqdm import tqdm
+accs = torch.tensor([main(run, model) for run in tqdm(range(20))])
+print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
