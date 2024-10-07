@@ -1,20 +1,8 @@
-#############################################
-#            Setup/Hyperparameters          #
-#############################################
-
-import os
-import sys
-import uuid
 from math import ceil
-
+from tqdm import tqdm
 import torch
 from torch import nn
-import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as T
-
 from airbench import CifarLoader, evaluate
-
 torch.backends.cudnn.benchmark = True
 
 #############################################
@@ -249,7 +237,6 @@ def main(run, model):
 
 model = make_net()
 model = torch.compile(model, mode='max-autotune')
-from tqdm import tqdm
 accs = torch.tensor([main(run, model) for run in tqdm(range(20))])
 print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
