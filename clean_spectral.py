@@ -204,12 +204,11 @@ def main(run, model):
     current_steps = 0
 
     # Reinitialize the network from scratch - nothing is reused from previous runs besides the PyTorch compilation
-    raw_model = (model._orig_mod if hasattr(model, '_orig_mod') else model)
     for m in model.modules():
         if type(m) in (Conv, BatchNorm, nn.Linear):
             m.reset_parameters()
-    model[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
-    current_steps = 0
+    raw_model = (model._orig_mod if hasattr(model, '_orig_mod') else model)
+    raw_model[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
 
     # Create optimizers for train whiten bias stage
     filter_params = [p for p in model.parameters() if len(p.shape) == 4 and p.requires_grad]
@@ -247,6 +246,6 @@ def main(run, model):
 
 model = make_net()
 model = torch.compile(model, mode='max-autotune')
-accs = torch.tensor([main(run, model) for run in tqdm(range(100))])
+accs = torch.tensor([main(run, model) for run in tqdm(range(30))])
 print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
