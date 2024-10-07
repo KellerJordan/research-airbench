@@ -146,7 +146,7 @@ class Conv(nn.Conv2d):
         torch.nn.init.dirac_(w[:w.size(1)])
 
 class ConvGroup(nn.Module):
-    def __init__(self, channels_in, channels_out, batchnorm_momentum):
+    def __init__(self, channels_in, channels_out, batchnorm_momentum=0.6):
         super().__init__()
         self.conv1 = Conv(channels_in,  channels_out)
         self.pool = nn.MaxPool2d(2)
@@ -169,22 +169,44 @@ class ConvGroup(nn.Module):
 #            Network Definition             #
 #############################################
 
+## The eigenvectors of the covariance matrix of 2x2 patches of CIFAR-10 divided by sqrt eigenvalues.
+eigenvectors_scaled = torch.tensor([
+ 8.9172e-02,  8.9172e-02,  8.8684e-02,  8.8623e-02,  9.3872e-02,  9.3872e-02,  9.3018e-02,  9.3018e-02,
+ 9.0027e-02,  9.0027e-02,  8.9233e-02,  8.9172e-02,  3.8818e-01,  3.8794e-01,  3.9111e-01,  3.9038e-01,
+-1.0767e-03, -1.3609e-03,  3.8567e-03,  3.2330e-03, -3.9087e-01, -3.9087e-01, -3.8428e-01, -3.8452e-01,
+-4.8242e-01, -4.7485e-01,  4.5435e-01,  4.6216e-01, -4.6240e-01, -4.5557e-01,  4.8975e-01,  4.9658e-01,
+-4.3311e-01, -4.2725e-01,  4.2285e-01,  4.2896e-01, -5.0781e-01,  5.1514e-01, -5.1562e-01,  5.0879e-01,
+-5.1807e-01,  5.2783e-01, -5.2539e-01,  5.1904e-01, -4.6460e-01,  4.7070e-01, -4.7168e-01,  4.6240e-01,
+-4.7290e-01, -4.7461e-01, -5.0635e-01, -5.0684e-01,  9.5410e-01,  9.5117e-01,  9.2090e-01,  9.1846e-01,
+-4.7363e-01, -4.7607e-01, -5.0439e-01, -5.0586e-01, -1.2539e+00,  1.2490e+00,  1.2383e+00, -1.2354e+00,
+-1.2637e+00,  1.2666e+00,  1.2715e+00, -1.2725e+00, -1.1396e+00,  1.1416e+00,  1.1494e+00, -1.1514e+00,
+-2.8262e+00, -2.7578e+00,  2.7617e+00,  2.8438e+00,  3.9404e-01,  3.7622e-01, -3.8330e-01, -3.9502e-01,
+ 2.6602e+00,  2.5801e+00, -2.6055e+00, -2.6738e+00, -2.9473e+00,  3.0312e+00, -3.0488e+00,  2.9648e+00,
+ 3.9111e-01, -4.0063e-01,  3.7939e-01, -3.7451e-01,  2.8242e+00, -2.9023e+00,  2.8789e+00, -2.8008e+00,
+ 2.6582e+00,  2.3105e+00, -2.3105e+00, -2.6484e+00, -5.9336e+00, -5.1680e+00,  5.1719e+00,  5.9258e+00,
+ 3.6855e+00,  3.2285e+00, -3.2148e+00, -3.6992e+00, -2.4668e+00,  2.8281e+00, -2.8379e+00,  2.4785e+00,
+ 5.4062e+00, -6.2031e+00,  6.1797e+00, -5.3906e+00, -3.3223e+00,  3.8164e+00, -3.8223e+00,  3.3340e+00,
+-8.0000e+00,  8.0000e+00,  8.0000e+00, -8.0078e+00,  9.7656e-01, -9.9414e-01, -9.8584e-01,  1.0039e+00,
+ 7.5938e+00, -7.5820e+00, -7.6133e+00,  7.6016e+00,  5.5508e+00, -5.5430e+00, -5.5430e+00,  5.5352e+00,
+-1.2133e+01,  1.2133e+01,  1.2148e+01, -1.2148e+01,  7.4141e+00, -7.4180e+00, -7.4219e+00,  7.4297e+00,
+]).reshape(12, 3, 2, 2)
+
 def make_net():
     widths = hyp['net']['widths']
-    batchnorm_momentum = hyp['net']['batchnorm_momentum']
     whiten_kernel_size = 2
     whiten_width = 2 * 3 * whiten_kernel_size**2
     net = nn.Sequential(
         Conv(3, whiten_width, whiten_kernel_size, padding=0, bias=True),
         nn.GELU(),
-        ConvGroup(whiten_width,     widths['block1'], batchnorm_momentum),
-        ConvGroup(widths['block1'], widths['block2'], batchnorm_momentum),
-        ConvGroup(widths['block2'], widths['block3'], batchnorm_momentum),
+        ConvGroup(whiten_width,     widths['block1']),
+        ConvGroup(widths['block1'], widths['block2']),
+        ConvGroup(widths['block2'], widths['block3']),
         nn.MaxPool2d(3),
         Flatten(),
         nn.Linear(widths['block3'], 10, bias=False),
         Mul(hyp['net']['scaling_factor']),
     )
+    net[0].weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
     net[0].weight.requires_grad = False
     net = net.half().cuda()
     net = net.to(memory_format=torch.channels_last)
@@ -194,7 +216,7 @@ def make_net():
     return net
 
 def reinit_net(model):
-    for m in model.modules():
+    for m in model._orig_mod[1:].modules():
         if type(m) in (Conv, BatchNorm, nn.Linear):
             m.reset_parameters()
 
@@ -220,36 +242,6 @@ def init_whitening_conv(layer, train_set, eps=5e-4):
     layer.weight.data[:] = torch.cat((eigenvectors_scaled, -eigenvectors_scaled))
 
 ############################################
-#                 Logging                  #
-############################################
-
-def print_columns(columns_list, is_head=False, is_final_entry=False):
-    print_string = ''
-    for col in columns_list:
-        print_string += '|  %s  ' % col
-    print_string += '|'
-    if is_head:
-        print('-'*len(print_string))
-    print(print_string)
-    if is_head or is_final_entry:
-        print('-'*len(print_string))
-
-logging_columns_list = ['run   ', 'epoch', 'train_loss', 'train_acc', 'val_acc', 'tta_val_acc', 'total_time_seconds']
-def print_training_details(variables, is_final_entry):
-    formatted = []
-    for col in logging_columns_list:
-        var = variables.get(col.strip(), None)
-        if type(var) in (int, str):
-            res = str(var)
-        elif type(var) is float:
-            res = '{:0.4f}'.format(var)
-        else:
-            assert var is None
-            res = ''
-        formatted.append(res.rjust(len(col)))
-    print_columns(formatted, is_final_entry=is_final_entry)
-
-############################################
 #                Training                  #
 ############################################
 
@@ -270,7 +262,7 @@ def main(run, model_trainbias, model_freezebias):
     loss_fn = nn.CrossEntropyLoss(label_smoothing=hyp['opt']['label_smoothing'], reduction='none')
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
-    train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'])
+    train_loader = CifarLoader('cifar10', train=True, batch_size=batch_size, aug=hyp['aug'], altflip=True)
     if run == 'warmup':
         # The only purpose of the first run is to warmup the compiled model, so we can use dummy data
         train_loader.labels = torch.randint(0, 10, size=(len(train_loader.labels),), device=train_loader.labels.device)
@@ -316,18 +308,9 @@ def main(run, model_trainbias, model_freezebias):
     scheduler1_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer1_freezebias, get_lr)
     scheduler2_freezebias = torch.optim.lr_scheduler.LambdaLR(optimizer2_freezebias, get_lr)
 
-    # For accurately timing GPU code
-    starter = torch.cuda.Event(enable_timing=True)
-    ender = torch.cuda.Event(enable_timing=True)
-    total_time_seconds = 0.0
-
     # Initialize the whitening layer using training images
-    starter.record()
     train_images = train_loader.normalize(train_loader.images[:5000])
     init_whitening_conv(model_trainbias._orig_mod[0], train_images)
-    ender.record()
-    torch.cuda.synchronize()
-    total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
     for epoch in range(ceil(epochs)):
 
@@ -351,8 +334,6 @@ def main(run, model_trainbias, model_freezebias):
         #     Training     #
         ####################
 
-        starter.record()
-
         model.train()
         for inputs, labels in train_loader:
             outputs = model(inputs)
@@ -366,33 +347,13 @@ def main(run, model_trainbias, model_freezebias):
             if current_steps >= total_train_steps:
                 break
 
-        ender.record()
-        torch.cuda.synchronize()
-        total_time_seconds += 1e-3 * starter.elapsed_time(ender)
-
-        ####################
-        #    Evaluation    #
-        ####################
-
-        # Save the accuracy and loss from the last training batch of the epoch
-        train_acc = (outputs.detach().argmax(1) == labels).float().mean().item()
-        train_loss = loss.item() / batch_size
-        val_acc = evaluate(model, test_loader, tta_level=0)
-        print_training_details(locals(), is_final_entry=False)
-        run = None # Only print the run number once
-
     ####################
     #  TTA Evaluation  #
     ####################
 
-    starter.record()
     tta_val_acc = evaluate(model, test_loader, tta_level=hyp['net']['tta_level'])
-    ender.record()
-    torch.cuda.synchronize()
-    total_time_seconds += 1e-3 * starter.elapsed_time(ender)
-
     epoch = 'eval'
-    print_training_details(locals(), is_final_entry=True)
+    print(tta_val_acc)
 
     return tta_val_acc
 
