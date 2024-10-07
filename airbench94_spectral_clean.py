@@ -19,6 +19,8 @@ import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as T
 
+import airbench
+
 torch.backends.cudnn.benchmark = True
 
 hyp = {
@@ -268,10 +270,6 @@ def main(train_ooader):
     scheduler1 = torch.optim.lr_scheduler.LambdaLR(optimizer1, get_lr)
     scheduler2 = torch.optim.lr_scheduler.LambdaLR(optimizer2, get_lr)
 
-    # Initialize the whitening layer using training images
-    train_images = train_loader.normalize(train_loader.images[:5000])
-    init_whitening_conv(model[0], train_images)
-
     for epoch in range(ceil(epochs)):
         model.train()
         for inputs, labels in train_loader:
@@ -290,6 +288,12 @@ def main(train_ooader):
     return model
     
 train_loader = airbench.CifarLoader('cifar10', train=True, batch_size=hyp['opt']['batch_size'], aug=hyp['aug'])
-model = main(train_loader)
 test_loader = airbench.CifarLoader('cifar10', train=False, batch_size=2000)
-print(airbench.evaluate(model, test_loader, tta_level=2))
+from tqdm import tqdm
+accs = []
+for _ in tqdm(range(10)):
+    acc = airbench.evaluate(main(train_loader), test_loader, tta_level=2)
+    print(acc)
+    accs.append(acc)
+print(torch.tensor(accs).mean())
+#print(airbench.evaluate(model, test_loader, tta_level=2))
