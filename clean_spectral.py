@@ -72,13 +72,21 @@ class SpectralSGDM(torch.optim.Optimizer):
                 if 'momentum_buffer' not in state.keys():
                     state['momentum_buffer'] = torch.zeros_like(g)
                 buf = state['momentum_buffer']
+
+                ### Post-orthogonalize
                 buf.mul_(momentum).add_(g)
                 g = g.add(buf, alpha=momentum) # Nesterov momentum
+                g = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape)
 
-                p.data.mul_(len(p.data)**0.5 / p.data.norm()) # normalize the weight
-                update = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape) # whiten the update
-                #update = zeroth_power_via_newtonschulz5(g.reshape(len(g), -1)).view(g.shape) # whiten the update
-                p.data.add_(update, alpha=-lr) # take a step
+                ### Pre-orthogonalize
+                #g = zeroth_power_via_newton(g.reshape(len(g), -1)).view(g.shape)
+                #buf.mul_(momentum).add_(g)
+                #g = g.add(buf, alpha=momentum) # Nesterov momentum
+                #g.mul_(len(p.data)**0.5 / g.norm()) # normalize gradient
+
+                ## Normalize and upate the weight
+                p.data.mul_(len(p.data)**0.5 / p.data.norm())
+                p.data.add_(g, alpha=-lr)
 
 #############################################
 #            Network Components             #
