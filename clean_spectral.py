@@ -34,8 +34,8 @@ def zeroth_power_via_newton(G, steps=15):
 
     # store the smaller of the squares as S
     S = G @ G.T if d1 < d2 else G.T @ G
-    #S_norm = torch.linalg.matrix_norm(S, ord='fro') # there is freedom here. See Lakic (1998) Thm 2.3
-    S_norm = spectral_norm(S)
+    S_norm = torch.linalg.matrix_norm(S, ord='fro') # there is freedom here. See Lakic (1998) Thm 2.3
+    #S_norm = spectral_norm(S)
     S /= S_norm
 
     # Now let's set up the state for the Lakic (1998) method
@@ -60,8 +60,8 @@ def zeroth_power_via_newtonschulz5(G, steps=9, eps=1e-7):
     #a, b, c = (3.4445, -4.7750,  2.0315)
     a, b, c = (3.1866, -4.4189,  2.1207)
     #a, b, c = (2.613, -3.2274, 1.6137)
-    X = 0.9 * G.bfloat16() / (spectral_norm(G) + eps) # ensure top singular value <= 1
-    #X = G.bfloat16() / (G.norm() + eps) # ensure top singular value <= 1
+    #X = 0.9 * G.bfloat16() / (spectral_norm(G) + eps) # ensure top singular value <= 1
+    X = G.bfloat16() / (G.norm() + eps) # ensure top singular value <= 1
     if G.size(0) > G.size(1):
         X = X.T
     for _ in range(steps):
