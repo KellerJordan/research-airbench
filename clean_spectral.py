@@ -1,3 +1,8 @@
+"""
+clean_spectral.py
+In n=50: (train on 40K eval 20K)
+Mean: 0.9385    Std: 0.0009
+"""
 from math import ceil
 from tqdm import tqdm
 import torch
@@ -76,7 +81,7 @@ def zeroth_power_via_svd(G, steps=None):
     U, S, V = G.float().svd()
     return U @ S.diag() @ V.T
 
-class SpectralSGDM(torch.optim.Optimizer):
+class Muon(torch.optim.Optimizer):
     def __init__(self, params, lr=1e-3, momentum=0):
         defaults = dict(lr=lr, momentum=momentum)
         super().__init__(params, defaults)
@@ -218,7 +223,7 @@ def make_net():
 
 def main(run, model):
 
-    epochs = 8
+    epochs = 10
     lr = 1.655910/2000
     wd = 0.003821
 
@@ -227,7 +232,12 @@ def main(run, model):
 
     test_loader = CifarLoader('cifar10', train=False, batch_size=2000)
     train_loader = CifarLoader('cifar10', train=True, batch_size=2000,
-                               aug=dict(flip=True, translate=2), altflip=True)
+                               aug=dict(flip=True, translate=2, cutout=0), altflip=True)
+    test_loader.images = torch.cat([test_loader.images, train_loader.images[40000:]])
+    test_loader.labels = torch.cat([test_loader.labels, train_loader.labels[40000:]])
+    train_loader.images = train_loader.images[:40000]
+    test_loader.labels = test_loader.labels[:40000]
+
     total_train_steps = ceil(len(train_loader) * epochs)
     current_steps = 0
 
@@ -245,7 +255,7 @@ def main(run, model):
     fc_layer = raw_model[-2].weight
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=[fc_layer, whiten_bias], lr=lr, weight_decay=wd/lr)]
-    optimizer1 = SpectralSGDM(filter_params, lr=0.24, momentum=0.6)
+    optimizer1 = Muon(filter_params, lr=0.24, momentum=0.6)
     optimizer2 = torch.optim.SGD(param_configs, momentum=0.85, nesterov=True)
     def get_lr(step):
         return 1 - step / total_train_steps
@@ -274,6 +284,6 @@ def main(run, model):
 
 model = make_net()
 #model = torch.compile(model, mode='max-autotune')
-accs = torch.tensor([main(run, model) for run in tqdm(range(10))])
+accs = torch.tensor([main(run, model) for run in tqdm(range(50))])
 print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
 
