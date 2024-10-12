@@ -1,7 +1,10 @@
 """
 clean_spectral.py
+
 In n=50: (train on 40K eval 20K)
 Mean: 0.9385    Std: 0.0009
+
+Just change back to 50K/10K split and epochs=8 to recover clean variant of airbench94_muon.
 """
 from math import ceil
 from tqdm import tqdm
